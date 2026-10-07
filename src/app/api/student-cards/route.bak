@@ -1,0 +1,184 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
+import * as QRCode from 'qrcode';
+
+/**
+ * GET /api/student-cards?id=xxx — بطاقة طالب واحد
+ * GET /api/student-cards?departmentId=xxx — كل بطاقات قسم
+ * GET /api/student-cards?all=true — كل البطاقات
+ *
+ * يُرجع صفحة HTML قابلة للطباعة ببطاقات هوية احترافية
+ */
+export async function GET(request: NextRequest) {
+  try {
+    await requireAuth();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const departmentId = searchParams.get('departmentId');
+    const all = searchParams.get('all') === 'true';
+
+    let where: any = { status: { in: ['registered', 'continuing'] } };
+    if (id) where = { id };
+    else if (departmentId) where.departmentId = departmentId;
+
+    const students = await db.student.findMany({
+      where,
+      include: { department: true, level: true, specialization: true },
+      take: id ? 1 : 100,
+      orderBy: { name: 'asc' },
+    });
+
+    if (students.length === 0) {
+      return new Response('لا يوجد طلاب', { status: 404 });
+    }
+
+    // ولّد QR Code لكل طالب
+    const cardsHtml = await Promise.all(students.map(async (s) => {
+      const qrData = JSON.stringify({
+        id: s.id,
+        name: s.name,
+        studentNumber: s.studentNumber,
+        department: s.department?.name,
+      });
+      const qrBase64 = await QRCode.toDataURL(qrData, { width: 120, margin: 1 });
+
+      return `
+      <div class="card">
+        <div class="card-header">
+          <div class="school-logo">🏫</div>
+          <div class="school-info">
+            <div class="school-name">مدرسة السلامة</div>
+            <div class="school-subtitle">مركز التكوين المهني</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="student-avatar">${s.name.charAt(0)}</div>
+          <div class="student-info">
+            <div class="student-name">${s.name}</div>
+            <div class="student-number">${s.studentNumber || '—'}</div>
+          </div>
+        </div>
+        <div class="card-details">
+          <div class="detail-row"><span class="label">القسم:</span> <span class="value">${s.department?.name || '—'}</span></div>
+          <div class="detail-row"><span class="label">المستوى:</span> <span class="value">${s.level?.name || '—'}</span></div>
+          <div class="detail-row"><span class="label">التخصص:</span> <span class="value">${s.specialization?.name || '—'}</span></div>
+          <div class="detail-row"><span class="label">الهاتف:</span> <span class="value">${s.phone || '—'}</span></div>
+        </div>
+        <div class="card-footer">
+          <img src="${qrBase64}" alt="QR" class="qr-code" />
+          <div class="validity">
+            <div>صالحة للدراسة</div>
+            <div>2026/2027</div>
+          </div>
+        </div>
+      </div>`;
+    }));
+
+    const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>بطاقات هوية الطلاب</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #f0f0f0; padding: 20px; }
+  @page { size: A4; margin: 1cm; }
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    max-width: 210mm;
+    margin: 0 auto;
+  }
+  .card {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border: 2px solid #0f766e;
+    width: 85mm;
+    height: 54mm;
+    display: flex;
+    flex-direction: column;
+    page-break-inside: avoid;
+  }
+  .card-header {
+    background: linear-gradient(135deg, #0f766e, #115e59);
+    color: white;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .school-logo { font-size: 18px; }
+  .school-name { font-size: 12px; font-weight: bold; }
+  .school-subtitle { font-size: 9px; opacity: 0.9; }
+  .card-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .student-avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0f766e, #0891b2);
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 16px;
+  }
+  .student-name { font-size: 12px; font-weight: bold; color: #1f2937; }
+  .student-number { font-size: 10px; color: #6b7280; font-family: monospace; }
+  .card-details {
+    padding: 4px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .detail-row { font-size: 9px; display: flex; justify-content: space-between; }
+  .label { color: #6b7280; }
+  .value { font-weight: 500; color: #1f2937; }
+  .card-footer {
+    background: #f9fafb;
+    padding: 4px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid #e5e7eb;
+  }
+  .qr-code { width: 32px; height: 32px; }
+  .validity { text-align: center; font-size: 8px; color: #6b7280; }
+  @media print {
+    body { background: white; padding: 0; }
+    .no-print { display: none; }
+  }
+  .print-btn {
+    position: fixed; top: 20px; left: 20px; z-index: 100;
+    background: #0f766e; color: white; border: none;
+    padding: 10px 20px; border-radius: 8px; cursor: pointer;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">🖨️ طباعة</button>
+  <div class="cards-grid">
+    ${cardsHtml.join('')}
+  </div>
+</body>
+</html>`;
+
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    }
+    console.error('GET /api/student-cards error:', error);
+    return NextResponse.json({ error: 'خطأ في الخادم' }, { status: 500 });
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "### OCR Transcription (Top to Bottom)  \nالإدخال  \nID  \n(حقل نصي)  \nاسم الطالب  \nالمرحلة  \nالقسم  \nالكلية (الجامعة)  \nالشعبة  \nالنوع  \nالبريد الإلكتروني  \nالرقم الجامعي  \nملاحظات  \n\n\n### Visual Layout Description  \n- **Header**: A light blue horizontal bar at the top of the image contains the Arabic text \"الإدخال\" (centered, black font).  \n- **Form Fields**: Below the header, there are 10 labeled input fields arranged vertically in a single column. Each field consists of a text label (left-aligned, black font) followed by a rectangular text box (white background, black border). All text boxes are empty.  \n  - **Field 1**: Label \"ID\" (English) with a text box to its right.  \n  - **Field 2**: Label \"(حقل نصي)\" (Arabic, meaning \"text field\") with a text box to its right.  \n  - **Field 3**: Label \"اسم الطالب\" (Arabic, \"Student Name\") with a text box to its right.  \n  - **Field 4**: Label \"المرحلة\" (Arabic, \"Level/Stage\") with a text box to its right.  \n  - **Field 5**: Label \"القسم\" (Arabic, \"Department\") with a text box to its right.  \n  - **Field 6**: Label \"الكلية (الجامعة)\" (Arabic, \"College (University)\") with a text box to its right.  \n  - **Field 7**: Label \"الشعبة\" (Arabic, \"Section\") with a text box to its right.  \n  - **Field 8**: Label \"النوع\" (Arabic, \"Type\") with a text box to its right.  \n  - **Field 9**: Label \"البريد الإلكتروني\" (Arabic, \"Email\") with a text box to its right.  \n  - **Field 10**: Label \"الرقم الجامعي\" (Arabic, \"University Number\") with a text box to its right.  \n  - **Field 11**: Label \"ملاحظات\" (Arabic, \"Notes\") with a larger rectangular text box (wider and taller than others) to its right.  \n- **Background**: The form is set against a white background. No buttons, icons, or additional decorative elements are visible.  \n\n\n### Field Status (Form)  \nAll fields are **empty** (no text entered in any text box).",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1782428152,
+  "id": "20260626065543d791357b90634517",
+  "model": "glm-4.6v",
+  "object": "chat.completion",
+  "request_id": "20260626065543d791357b90634517",
+  "usage": {
+    "completion_tokens": 573,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 786,
+    "prompt_tokens_details": {
+      "cached_tokens": 5
+    },
+    "total_tokens": 1359
+  }
+}

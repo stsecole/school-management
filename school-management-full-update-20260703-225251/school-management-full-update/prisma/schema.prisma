@@ -1,0 +1,565 @@
+// Prisma schema for educational institution management system
+// نظام إدارة المؤسسة التعليمية - مدرسة السلامة
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== المستخدمون والمصادقة =====
+model User {
+  id                    String   @id @default(cuid())
+  username              String   @unique
+  password              String
+  name                  String
+  role                  String   @default("employee") // "director" | "employee"
+  canManageTimetable    Boolean  @default(false) // صلاحية إدارة الجدول الزمني للموظفين
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  timesheets            EmployeeTimesheet[]
+}
+
+// ===== الأقسام والشعب =====
+model Department {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  code            String?          // رمز القسم
+  description     String?
+  isFixed         Boolean          @default(false) // الأقسام الستة الثابتة
+  hasInstallments Boolean          @default(false) // قسم التقني سامي = true (30 شهر)
+  installmentMonths Int?           // عدد أشهر الأقساط (30 للتقني سامي)
+  defaultMonthlyAmount Float?     // القسط الشهري الافتراضي
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  students        Student[]
+  teachers        Teacher[]
+  courses         Course[]
+  specializations Specialization[]
+  groups          Group[]
+  subjects        Subject[]
+  exams           Exam[]
+}
+
+// ===== التخصصات (الشعب) =====
+model Specialization {
+  id          String   @id @default(cuid())
+  name        String   // اسم التخصص/الشعبة
+  departmentId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  department  Department @relation(fields: [departmentId], references: [id])
+  students    Student[]
+  groups      Group[]
+  subjects    Subject[]
+}
+
+// ===== المستويات =====
+model Level {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  students    Student[]
+  courses     Course[]
+  exams       Exam[]
+}
+
+// ===== المواد/الدورات =====
+model Course {
+  id            String      @id @default(cuid())
+  name          String
+  code          String?
+  departmentId  String?
+  levelId       String?
+  teacherId     String?
+  price         Float       @default(0) // تكلفة الدورة
+  duration      Int?        // المدة بالساعات
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  department    Department? @relation(fields: [departmentId], references: [id])
+  level         Level?      @relation(fields: [levelId], references: [id])
+  teacher       Teacher?    @relation(fields: [teacherId], references: [id])
+  attendances   Attendance[]
+  exams         Exam[]
+}
+
+// ===== الأساتذة =====
+model Teacher {
+  id            String           @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  gender        String?          // "ذكر" | "أنثى"
+  specialty     String?          // التخصص
+  departmentId  String?
+  salary        Float            @default(0) // الراتب الشهري
+  hireDate      DateTime?
+  status        String           @default("active") // "active" | "inactive"
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  department    Department?      @relation(fields: [departmentId], references: [id])
+  courses       Course[]
+  attendances   Attendance[]
+  payments      TeacherPayment[]
+  subjects      Subject[]
+  sessions      TimetableSession[]
+}
+
+// ===== الطلاب =====
+model Student {
+  id              String            @id @default(cuid())
+  studentNumber   String?           // الرقم الجامعي / رقم التسجيل
+  name            String            // الاسم واللقب
+  email           String?
+  phone           String?
+  gender          String?           // "ذكر" | "أنثى"
+  birthDate       DateTime?
+  address         String?
+  photoUrl        String?           // صورة الطالب
+  // البيانات الأكاديمية
+  departmentId    String?
+  levelId         String?
+  specializationId String?          // التخصص (الشعبة) - مرتبط بقسم معين
+  section         String?           // الشعبة (نص حر للتوافق القديم)
+  college         String?           // الكلية/الجامعة
+  specialty       String?           // التخصص (نص حر للتوافق القديم)
+  courseStartDate DateTime?         // تاريخ بداية الدورة (لحساب الأقساط الشهرية)
+  totalAmount     Float?            // المبلغ الإجمالي الذي يجب دفعه خلال 30 شهر (للتقني سامي)
+  initialPayment  Float?            // الدفعة الأولية المدفوعة (تُخصم من المبلغ الإجمالي)
+  registrationDate DateTime        @default(now()) // تاريخ التسجيل
+  status          String            @default("registered") // "registered" | "continuing" | "abandoned" | "postponed" | "graduated"
+  // مستندات الملف (للأقسام: اللغات، الدورات النسوية، الدورات التأهيلية)
+  docPhotos       Boolean           @default(false) // 02 صور
+  docBirthCert    Boolean           @default(false) // شهادة ميلاد
+  docIdCard       Boolean           @default(false) // نسخة من بطاقة التعريف
+  // مستندات ملف التقني سامي (TS)
+  docTsPhotos     Boolean           @default(false) // 04 صور
+  docTsBirthCerts Boolean           @default(false) // 03 شهادات ميلاد
+  docTsIdCards    Boolean           @default(false) // 03 نسخ من بطاقة التعريف
+  docSchoolCert   Boolean           @default(false) // شهادة مدرسية أصلية
+  docMedicalCert  Boolean           @default(false) // شهادة طبية
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  department      Department?       @relation(fields: [departmentId], references: [id])
+  level           Level?            @relation(fields: [levelId], references: [id])
+  specialization  Specialization?   @relation(fields: [specializationId], references: [id])
+  attendances     Attendance[]
+  payments        StudentPayment[]
+  registrations   Registration[]
+  installments    InstallmentPlan[]
+  grades          Grade[]
+}
+
+// ===== جدول أقساط التقني سامي (30 شهر) =====
+model InstallmentPlan {
+  id              String   @id @default(cuid())
+  studentId       String
+  monthNumber     Int      // رقم الشهر (1 إلى 30)
+  expectedAmount  Float    // المبلغ المطلوب
+  paidAmount      Float    @default(0) // المبلغ المدفوع
+  expectedDate    DateTime // تاريخ الاستحقاق المخطط
+  paidDate        DateTime? // تاريخ الدفع الفعلي
+  status          String   @default("pending") // "pending" | "paid" | "partial" | "late"
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments        StudentPayment[] @relation("PaymentToInstallment")
+}
+
+// ===== التسجيلات في الدورات =====
+model Registration {
+  id          String   @id @default(cuid())
+  studentId   String
+  courseId    String?
+  courseName  String   // اسم الدورة (مباشرة لتسهيل الاستيراد)
+  level       String?  // المستوى
+  specialty   String?  // التخصص
+  date        DateTime @default(now())
+  note        String?
+  photoUrl    String?  // صورة المتربص (مسار الصورة المرفقة)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  student     Student  @relation(fields: [studentId], references: [id])
+}
+
+// ===== الحضور =====
+model Attendance {
+  id              String   @id @default(cuid())
+  date            DateTime
+  courseId        String?
+  courseName      String   // المادة (مباشرة ليتوافق مع ملف Excel)
+  level           String?  // المستوى
+  startTime       String?  // وقت البداية (HH:MM) - إجباري لحساب المدة
+  endTime         String?  // وقت النهاية (HH:MM) - إجباري لحساب المدة
+  timeSlot        String?  // التوقيت (نص حر للعرض - يُملأ تلقائياً من startTime/endTime)
+  teacherId       String?
+  teacherName     String?  // الأستاذ (مباشرة)
+  totalCount      Int      @default(0) // عدد الحضور الإجمالي
+  maleCount       Int      @default(0) // ذكر
+  femaleCount     Int      @default(0) // أنثى
+  durationMinutes Int      @default(0) // المدة بالدقائق (تُحسب تلقائياً من startTime و endTime)
+  unpaidCount     Int      @default(0) // لم يدفع
+  notes           String?
+  studentId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  course          Course?  @relation(fields: [courseId], references: [id])
+  teacher         Teacher? @relation(fields: [teacherId], references: [id])
+  student         Student? @relation(fields: [studentId], references: [id])
+}
+
+// ===== المهام (متابعة المهام) =====
+model Task {
+  id           String   @id @default(cuid())
+  title        String   // المهام
+  priority     String   @default("medium") // الأولوية: "high" | "medium" | "low" (عالي/متوسط/منخفض)
+  priorityLabel String? // عالي، متوسط، منخفض (نص عربي)
+  responsible  String?  // المسؤول
+  startDate    DateTime? // تاريخ البدأ
+  deadline     DateTime? // الأجال
+  completed    Boolean  @default(false) // إكتمال
+  status       String   @default("pending") // الحالة: pending/in_progress/done
+  statusValue  Int      @default(0) // قيمة رقمية للحالة (لمطابقة Excel)
+  notes        String?  // ملاحظات
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ===== مدفوعات الطلاب (الأقساط) =====
+model StudentPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل
+  studentId     String
+  amount        Float    // المبلغ المدفوع
+  paymentType   String   @default("installment") // "registration" | "installment" | "full"
+  paymentLabel  String?  // "تسجيل" | "قسط أول" | "قسط ثاني" | ...
+  paymentDate   DateTime // تاريخ الدفع
+  paymentMethod String?  // "cash" | "transfer" | "cheque" (نقدا/تحويل/شيك)
+  installmentId String?  // رابط مع قسط محدد من جدول InstallmentPlan (للتقني سامي)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  student       Student  @relation(fields: [studentId], references: [id])
+  installment   InstallmentPlan? @relation("PaymentToInstallment", fields: [installmentId], references: [id])
+}
+
+// ===== مدفوعات الأساتذة (الرواتب) =====
+model TeacherPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique
+  teacherId     String
+  amount        Float    // المبلغ المدفوع
+  month         String   // الشهر: "2024-01"
+  paymentDate   DateTime
+  paymentType   String   @default("salary") // "salary" | "bonus" | "advance"
+  paymentLabel  String?  // "راتب" | "منحة" | "سلفة"
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  teacher       Teacher  @relation(fields: [teacherId], references: [id])
+}
+
+// ===== المصاريف الثانوية =====
+model Expense {
+  id          String   @id @default(cuid())
+  date        DateTime                       // تاريخ المصروف
+  type        String                         // نوع المصروف: "إيجار" | "كهرباء" | "ماء" | "قرطاسية" | "صيانة" | "إنترنت" | "نقل" | "ضيافة" | "أخرى"
+  description String?                        // وصف/ملاحظات
+  amount      Float                          // المبلغ
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== إعدادات النظام =====
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ===== وحدة الجدول الأسبوعي (Timetable Module) =====
+
+// القاعات
+model Room {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String?  // رقم القاعة
+  capacity    Int      @default(30)
+  type        String   @default("classroom") // "classroom" | "lab" | "computer_lab" | "amphitheater"
+  building    String?
+  floor       String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sessions    TimetableSession[]
+}
+
+// الأفواج
+model Group {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  code            String?
+  departmentId    String?
+  specializationId String?
+  level           String?
+  studentCount    Int      @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  department      Department? @relation(fields: [departmentId], references: [id])
+  specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  sessions        TimetableSession[]
+}
+
+// المواد (للجدول)
+model Subject {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  code            String?
+  departmentId    String?
+  specializationId String?
+  weeklyHours     Int      @default(2)
+  requiredRoomType String? // "lab" | "computer_lab" | "amphitheater" | null
+  color           String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  department      Department? @relation(fields: [departmentId], references: [id])
+  specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  teacherId       String?
+  teacher         Teacher? @relation(fields: [teacherId], references: [id])
+  sessions        TimetableSession[]
+}
+
+// الفترات الزمنية
+model TimeSlot {
+  id          String   @id @default(cuid())
+  name        String
+  dayOfWeek   Int      // 0=الأحد, 6=السبت
+  startTime   String   // "08:00"
+  endTime     String   // "10:00"
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sessions    TimetableSession[]
+}
+
+// العطل
+model Holiday {
+  id          String   @id @default(cuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  type        String   @default("holiday") // "holiday" | "exam" | "event"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// إعدادات الدوام
+model WorkSettings {
+  id              String   @id @default(cuid())
+  workDays        String   @default("0,1,2,3,4") // أيام العمل (مفصولة بفواصل)
+  workStartTime   String   @default("08:00")
+  workEndTime     String   @default("18:00")
+  sessionDuration Int      @default(120) // دقائق
+  breakDuration   Int      @default(15)
+  maxTeacherHoursPerWeek Int @default(20)
+  maxSessionsPerDay Int    @default(4)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// الحصص
+model TimetableSession {
+  id          String   @id @default(cuid())
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  teacherId   String?
+  teacherName String?
+  roomId      String?
+  roomName    String?
+  groupId     String?
+  groupName   String?
+  subjectId   String?
+  subjectName String?
+  notes       String?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacher     Teacher? @relation(fields: [teacherId], references: [id])
+  room        Room?    @relation(fields: [roomId], references: [id])
+  group       Group?   @relation(fields: [groupId], references: [id])
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  timeSlot    TimeSlot? @relation(fields: [timeSlotId], references: [id])
+  timeSlotId  String?
+}
+
+// ===== حضور الموظفين (Employee Timesheet) =====
+model EmployeeTimesheet {
+  id            String    @id @default(cuid())
+  userId        String   // المرتبط بحساب المستخدم
+  date          DateTime // التاريخ
+  dayOfWeek     Int      // 0=الأحد, 6=السبت
+  // الفترة الأولى
+  checkIn1      String?  // دخول (HH:MM)
+  checkOut1     String?  // خروج (HH:MM)
+  // الفترة الثانية
+  checkIn2      String?  // دخول (HH:MM)
+  checkOut2     String?  // خروج (HH:MM)
+  // الساعات المحسوبة
+  totalHours    Float    @default(0) // إجمالي الساعات
+  regularHours  Float    @default(0) // الساعات العادية
+  overtimeHours Float    @default(0) // الوقت الإضافي
+  sickHours     Float    @default(0) // عطلة مرضية
+  leaveHours    Float    @default(0) // عطلة
+  // الحالة
+  status        String   @default("present") // "present" | "absent" | "sick" | "leave" | "holiday"
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===== الامتحانات والدرجات (Exams Module) =====
+
+// الامتحانات
+model Exam {
+  id            String   @id @default(cuid())
+  title         String   // عنوان الامتحان
+  examDate      DateTime // تاريخ الامتحان
+  maxScore      Float    @default(20) // العلامة القصوى (مثلاً 20)
+  passingScore  Float    @default(10) // علامة النجاح
+  weight        Float    @default(1) // معامل الامتحان
+  term          String   @default("first") // الفصل: "first" | "second" | "final"
+  status        String   @default("scheduled") // "scheduled" | "completed" | "cancelled"
+  departmentId  String?
+  levelId       String?
+  courseId      String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  department    Department? @relation(fields: [departmentId], references: [id])
+  level         Level?      @relation(fields: [levelId], references: [id])
+  course        Course?     @relation(fields: [courseId], references: [id])
+  grades        Grade[]
+}
+
+// درجات الطلاب في الامتحانات
+model Grade {
+  id          String   @id @default(cuid())
+  examId      String
+  studentId   String
+  score       Float?   // الدرجة (null = لم يُدخل بعد)
+  isAbsent    Boolean  @default(false) // غائب
+  isExcused   Boolean  @default(false) // غياب مبرر
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, studentId])
+}
+
+// ===== نظام إدارة العملاء المحتملين (CRM) =====
+model Lead {
+  id              String   @id @default(cuid())
+  fullName        String
+  phone           String
+  phone2          String?
+  email           String?
+  gender          String?  // "ذكر" | "أنثى"
+  birthDate       DateTime?
+  wilaya          String?
+  baladia         String?
+  address         String?
+  source          String   @default("أخرى") // مصدر العميل
+  desiredCourse   String?  // التخصص المطلوب
+  desiredBranch   String?  // الفرع
+  assignedTo      String?  // الموظف المسؤول
+  firstContactDate DateTime @default(now())
+  lastFollowUpDate DateTime?
+  nextFollowUpDate DateTime?
+  status          String   @default("new") // new, contacted, interested, waiting, appointment, registered, rejected, no_answer, postponed
+  interestLevel   String   @default("medium") // low, medium, high
+  notes           String?
+  // التحويل لطالب
+  convertedToStudentId String?
+  convertedAt     DateTime?
+  // آخر تعديل
+  lastModifiedBy  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  followUps       LeadFollowUp[]
+}
+
+model LeadFollowUp {
+  id              String   @id @default(cuid())
+  leadId          String
+  date            DateTime @default(now())
+  userName        String   // الموظف
+  contactType     String   // call, whatsapp, visit, email
+  notes           String?
+  result          String?  // نتيجة المتابعة
+  nextFollowUpDate DateTime?
+  createdAt       DateTime @default(now())
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ===== وحدة المساعد الذكي (AI Assistant) =====
+
+model AIConversation {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String   @default("محادثة جديدة")
+  pinned      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    AIMessage[]
+
+  @@index([userId])
+}
+
+model AIMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  role            String
+  content         String
+  messageType     String   @default("text")
+  metadata        String?
+  feedback        String?
+  feedbackNote    String?
+  provider        String?
+  tokensUsed      Int      @default(0)
+  durationMs      Int      @default(0)
+  createdAt       DateTime @default(now())
+  conversation    AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  userName    String?
+  action      String
+  targetType  String?
+  targetId    String?
+  details     String?
+  source      String   @default("manual")
+  status      String   @default("success")
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+}

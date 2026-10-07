@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// PUT /api/finance/staff-payments/[id]
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth();
+    if (user.role !== 'director') {
+      return NextResponse.json({ error: 'صلاحيات مدير مطلوبة' }, { status: 403 });
+    }
+    const { id } = await params;
+    const body = await request.json();
+
+    // Get user name if userId changed
+    let userName: string | undefined;
+    if (body.userId) {
+      const staffUser = await db.user.findUnique({
+        where: { id: body.userId },
+        select: { name: true },
+      });
+      userName = staffUser?.name;
+    }
+
+    const payment = await db.staffPayment.update({
+      where: { id },
+      data: {
+        userId: body.userId || undefined,
+        userName: userName || undefined,
+        amount: body.amount ? parseFloat(body.amount) : undefined,
+        month: body.month || undefined,
+        paymentDate: body.paymentDate ? new Date(body.paymentDate) : undefined,
+        paymentType: body.paymentType || undefined,
+        paymentLabel: body.paymentLabel || null,
+        notes: body.notes !== undefined ? (body.notes || null) : undefined,
+      },
+    });
+
+    return NextResponse.json({ payment });
+  } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    console.error('PUT /api/finance/staff-payments error:', error);
+    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
+  }
+}
+
+// DELETE /api/finance/staff-payments/[id]
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth();
+    if (user.role !== 'director') {
+      return NextResponse.json({ error: 'صلاحيات مدير مطلوبة' }, { status: 403 });
+    }
+    const { id } = await params;
+    await db.staffPayment.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    console.error('DELETE /api/finance/staff-payments error:', error);
+    return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
+  }
+}

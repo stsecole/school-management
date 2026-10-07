@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "### 1. Overall Description  \nThis is a **form interface** (likely for data entry or registration) in Arabic, not a payment receipt, bank transfer confirmation, or SMS receipt. It appears to be a structured input form with labeled fields for user information.\n\n\n### 2. Layout and Structure  \n- **Header**: A light blue bar at the top with the Arabic title \"الإصدار\" (The Edition/Version) centered.  \n- **Body**: A white background with a vertical list of labeled text fields (input boxes) aligned to the left. Each label is in Arabic, followed by a rectangular input field (some fields are empty, and one field—labeled \"ID\"—has a small dark gray button with text).  \n- **Footer**: No distinct footer; the form ends with a large empty text area labeled \"ملاحظات\" (Notes).  \n- **Colors**: Light blue header, white body, black text for labels/fields, and a dark gray button for the \"ID\" field.  \n\n\n### 3. Visible Labels/Fields (Arabic + English Translation)  \n| Arabic Label               | English Translation (Parentheses)       |  \n|---------------------------|---------------------------------------|  \n| ID                        | ID                                    |  \n| اسم المستخدم (اسم)       | Username (Name)                        |  \n| البريد                      | Email                                 |  \n| العنوان                     | Address                               |  \n| رقم الهاتف (الجوال)         | Phone Number (Mobile)                  |  \n| المدينة                     | City                                  |  \n| الدولة                     | Country                               |  \n| الرمز البريدي                | Postal Code                           |  \n| رقم الهاتف الثابت            | Landline Number                        |  \n| ملاحظات                    | Notes                                 |  \n\n\n### 4. Amounts, Currencies, Dates, Times, Reference Numbers, Account Numbers, Phone Numbers  \n- **No amounts, currencies, dates, times, reference numbers, account numbers, or phone numbers** are visible in the screenshot.  \n\n\n### 5. Logos, App Names, Bank Names, or Sender/Recipient Identifiers  \n- **No logos, app names, bank names, or sender/recipient identifiers** are visible.  \n\n\n### 6. Status Bar/Notification Area  \n- **No status bar or notification area content** is visible (the screenshot focuses on the form, not the phone’s status bar).  \n\n\n### Notes  \nThe form is empty except for the \"ID\" field, which has a small dark gray button (text on the button is not legible). All other fields are blank input boxes. The design is minimal, with no decorative elements or additional text beyond the labels and input fields.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1782428079,
+  "id": "20260626065428fc0790bc79054b75",
+  "model": "glm-4.6v",
+  "object": "chat.completion",
+  "request_id": "20260626065428fc0790bc79054b75",
+  "usage": {
+    "completion_tokens": 562,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 870,
+    "prompt_tokens_details": {
+      "cached_tokens": 6
+    },
+    "total_tokens": 1432
+  }
+}

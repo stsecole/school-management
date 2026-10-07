@@ -1,0 +1,39 @@
+// أضف هذه النماذج في نهاية ملف prisma/schema.prisma
+
+// ===== اعدادات النسخ الاحتياطي (Backup Settings) =====
+
+model BackupSettings {
+  id                      String   @id @default(cuid())
+  autoBackupEnabled       Boolean  @default(true)
+  frequency               String   @default("daily")
+  scheduledTime           String   @default("02:00")
+  maxBackups              Int      @default(30)
+  lastAutoBackupAt        DateTime?
+  lastManualBackupAt      DateTime?
+  lastRestoreAt           DateTime?
+  notifyOnAutoBackup      Boolean  @default(false)
+  notifyOnBackupFailure   Boolean  @default(true)
+  backupLocation          String   @default("download/backups")
+  compressBackups         Boolean  @default(false)
+  includeUploads          Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+// ===== سجل النسخ الاحتياطي (Backup Log) =====
+
+model BackupLog {
+  id          String   @id @default(cuid())
+  type        String
+  filename    String
+  size        Int
+  status      String   @default("success")
+  errorMessage String?
+  userId      String?
+  userName    String?
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}

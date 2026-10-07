@@ -1,0 +1,53 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+/**
+ * Proxy (Next.js 16 replaces middleware with proxy)
+ *
+ * يقوم بأمرين:
+ * 1. تمرير كل الطلبات (لا يقرأ body، لا يستخدم DB)
+ * 2. تفعيل النسخ الاحتياطي التلقائي عند زيارة الصفحات (كل 5 دقائق)
+ */
+
+// ذاكرة مؤقتة لتجنب التحقق المتكرر
+let lastBackupCheckTime = 0;
+const BACKUP_CHECK_INTERVAL = 5 * 60 * 1000; // 5 دقائق
+
+export async function proxy(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // تفعيل النسخ التلقائي فقط لطلبات الصفحات (وليس API أو ملفات ثابتة)
+  if (
+    !path.startsWith('/api/') &&
+    !path.startsWith('/_next/') &&
+    !path.startsWith('/static/') &&
+    !path.startsWith('/scan')
+  ) {
+    const now = Date.now();
+    // تحقق كل 5 دقائق فقط (للأداء)
+    if (now - lastBackupCheckTime > BACKUP_CHECK_INTERVAL) {
+      lastBackupCheckTime = now;
+
+      // استدعاء API النسخ التلقائي بشكل غير متزامن (لا ينتظر النتيجة)
+      try {
+        const origin = request.nextUrl.origin;
+        // استخدام keepalive لضمان إتمام الطلب حتى لو انتهت الاستجابة
+        fetch(`${origin}/api/backup/auto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+        }).catch(() => {
+          // تجاهل الأخطاء بصمت
+        });
+      } catch {
+        // تجاهل الأخطاء
+      }
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  // مطابقة كل المسارات ما عدا الملفات الثابتة
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|scan).*)'],
+};

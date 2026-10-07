@@ -1,0 +1,273 @@
+// ===== POST /api/ai/chat - محادثة المساعد الذكي =====
+// يستخدم ZAI مباشرة (مثل التقارير) مع fallback محلي ذكي
+import { NextRequest } from 'next/server';
+import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/auth';
+import { ctxFromUser, buildSystemPrompt, detectIntent, runTool, extractActionBlock } from '@/lib/ai';
+import type { ChatMessage } from '@/lib/ai/types';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+interface ChatBody {
+  conversationId?: string;
+  message: string;
+  regenerate?: boolean;
+}
+
+/**
+ * استدعاء ZAI مباشرة (مثل /api/reports/ai-analysis)
+ * يُرجع النص الكامل + عدد الـ tokens
+ */
+async function callZai(messages: ChatMessage[]): Promise<{ content: string; tokensUsed: number }> {
+  const ZAI = (await import('z-ai-web-dev-sdk')).default;
+  const zai = await ZAI.create();
+  const completion = await zai.chat.completions.create({
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    temperature: 0.7,
+    max_tokens: 2048,
+  });
+  return {
+    content: completion.choices?.[0]?.message?.content || '',
+    tokensUsed: completion.usage?.total_tokens || 0,
+  };
+}
+
+/**
+ * Fallback محلي ذكي — يُنشئ إجابة من البيانات الفعلية
+ * يعمل بدون اتصال إنترنت
+ */
+function generateLocalResponse(message: string, ctx: any, toolResult: any): string {
+  const m = message.toLowerCase();
+
+  // إن كان هناك نتيجة أداة، استخدمها
+  if (toolResult?.text) {
+    return toolResult.text;
+  }
+
+  // ردود ذكية حسب نوع السؤال
+  if (/كم.*عدد.*طلاب|عدد الطلاب|how many students/i.test(m)) {
+    return "## 📊 عدد الطلاب\n\n" +
+      "يمكنني إعطاؤك العدد الدقيق! اكتب أحد هذه الأوامر:\n\n" +
+      "- **«كم عدد الطلاب؟»** — لإظهار العدد الكلي\n" +
+      "- **«عدد الطلاب في كل قسم»** — لتوزيع الطلاب على الأقسام\n\n" +
+      "💡 *ملاحظة: المزود المحلي لا يدعم التحليل الذكي. للحصول على إجابات أفضل، تأكد من اتصال الإنترنت.*";
+  }
+
+  if (/مرحبا|السلام|اهلا|أهلا|hello|hi|bonjour/i.test(m)) {
+    return "## 👋 مرحباً بك!\n\n" +
+      "أنا المساعد الذكي الإداري لمركز التكوين المهني — مدرسة السلامة.\n\n" +
+      "### يمكنني مساعدتك في:\n" +
+      "- 📊 **الإحصائيات**: «كم عدد الطلاب؟»، «الحضور اليوم»\n" +
+      "- 💰 **المالية**: «المداخيل هذا الأسبوع»، «الأقساط المتأخرة»\n" +
+      "- 📝 **التقارير**: «تقرير الحضور»، «مقارنة بين الشهور»\n" +
+      "- 🎯 **الإجراءات**: «أنشئ تخصصاً»، «أرسل إشعاراً»\n\n" +
+      "💡 *ملاحظة: أعمل حالياً في الوضع المحلي. للحصول على ذكاء اصطناعي كامل، تحقق من اتصال الإنترنت وإعدادات ZAI.*";
+  }
+
+  return "## 💡 المساعد الذكي\n\n" +
+    "لم أفهم سؤالك تماماً. يمكنني مساعدتك في:\n\n" +
+    "### 📊 الإحصائيات\n" +
+    "- «كم عدد الطلاب؟»\n" +
+    "- «عدد الأساتذة»\n" +
+    "- «الحضور اليوم»\n\n" +
+    "### 💰 المالية\n" +
+    "- «المداخيل هذا الأسبوع»\n" +
+    "- «الأقساط المتأخرة»\n\n" +
+    "### 📝 التقارير\n" +
+    "- «تقرير الحضور»\n" +
+    "- «مقارنة بين الشهور»\n\n" +
+    "### 🎯 الإجراءات\n" +
+    "- «أنشئ تخصصاً»\n" +
+    "- «أرسل إشعاراً»\n\n" +
+    "---\n" +
+    "💡 *ملاحظة: أعمل حالياً في الوضع المحلي (بدون اتصال ZAI). للحصول على إجابات أكثر ذكاءً، تحقق من اتصال الإنترنت.*";
+}
+
+export async function POST(req: NextRequest) {
+  let user;
+  try {
+    user = await requireAuth();
+  } catch {
+    return new Response(JSON.stringify({ error: 'UNAUTHORIZED' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const body = (await req.json()) as ChatBody;
+  if (!body.message || typeof body.message !== 'string') {
+    return new Response(JSON.stringify({ error: 'الرسالة مطلوبة' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // التحقق من تفعيل الذكاء الاصطناعي
+  const enabledSetting = await db.setting.findUnique({ where: { key: 'ai_enabled' } });
+  if (enabledSetting?.value === 'false') {
+    return new Response(JSON.stringify({ error: 'المساعد الذكي معطّل' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // إنشاء/جلب المحادثة
+  let conversation = body.conversationId
+    ? await db.aIConversation.findFirst({
+        where: { id: body.conversationId, userId: user.id },
+      })
+    : null;
+  if (!conversation) {
+    conversation = await db.aIConversation.create({
+      data: {
+        userId: user.id,
+        title: body.message.slice(0, 50),
+      },
+    });
+  }
+
+  const ctx = await ctxFromUser(user);
+  const intent = detectIntent(body.message);
+
+  const encoder = new TextEncoder();
+  const conversationId = conversation.id;
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) =>
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+
+      try {
+        // حفظ رسالة المستخدم
+        if (!body.regenerate) {
+          await db.aIMessage.create({
+            data: {
+              conversationId,
+              role: 'user',
+              content: body.message,
+            },
+          });
+        }
+
+        send({ type: 'conversation', conversationId, title: conversation?.title });
+
+        let fullText = '';
+        let tokensUsed = 0;
+        let provider = 'zai';
+        let toolResultMeta: any = null;
+        let actionMeta: any = null;
+
+        // === 1) تنفيذ الأداة إن وُجدت ===
+        let toolResult: any = null;
+        if (intent.tool) {
+          send({ type: 'tool_start', tool: intent.tool.name });
+          try {
+            toolResult = await runTool(intent.tool, ctx);
+            send({ type: 'tool_result', result: toolResult });
+            toolResultMeta = toolResult;
+          } catch (e: any) {
+            console.error('[AI] Tool execution failed:', e?.message);
+          }
+        }
+
+        // === 2) إجراء - أرسل بطاقة تأكيد ===
+        if (intent.action) {
+          actionMeta = intent.action;
+          send({ type: 'action_confirm', action: intent.action });
+        }
+
+        // === 3) استدعاء ZAI للحصول على رد ذكي ===
+        const systemPrompt = await buildSystemPrompt(ctx);
+        const history: ChatMessage[] = [
+          { role: 'user', content: body.message },
+        ];
+
+        // إن كان هناك نتيجة أداة، أضفها للسياق
+        let userContent = body.message;
+        if (toolResult?.text) {
+          userContent = `${body.message}\n\n[نتيجة الاستعلام من قاعدة البيانات]:\n${toolResult.text}\n\nقدّم تحليلاً مختصراً بالعربية لهذه النتيجة.`;
+        }
+
+        const messages: ChatMessage[] = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ];
+
+        // محاولة ZAI مع fallback محلي
+        let responseText = '';
+        try {
+          console.log('[AI] Calling ZAI directly...');
+          const zaiResponse = await callZai(messages);
+          responseText = zaiResponse.content;
+          tokensUsed = zaiResponse.tokensUsed;
+
+          if (!responseText.trim()) {
+            console.log('[AI] ZAI returned empty, using local fallback');
+            responseText = generateLocalResponse(body.message, ctx, toolResult);
+            provider = 'local';
+          } else {
+            provider = 'zai';
+          }
+        } catch (err: any) {
+          console.error('[AI] ZAI failed, using local fallback:', err?.message);
+          responseText = generateLocalResponse(body.message, ctx, toolResult);
+          provider = 'local';
+        }
+
+        fullText = responseText;
+
+        // === 4) استخرج أي action block من الرد ===
+        const actionBlock = extractActionBlock(fullText);
+        if (actionBlock) {
+          actionMeta = actionBlock;
+          send({ type: 'action_confirm', action: actionBlock });
+        }
+
+        // === 5) أرسل النص بشكل streaming (مقسّم إلى كلمات) ===
+        const tokens = responseText.match(/\S+\s*/g) || [responseText];
+        for (let i = 0; i < tokens.length; i += 2) {
+          const slice = tokens.slice(i, i + 2).join('');
+          send({ type: 'delta', content: slice });
+          await new Promise((r) => setTimeout(r, 15));
+        }
+
+        // === 6) احفظ رد المساعد ===
+        if (fullText.trim() || toolResultMeta) {
+          await db.aIMessage.create({
+            data: {
+              conversationId,
+              role: 'assistant',
+              content: fullText || '[نتيجة أداة]',
+              provider,
+              tokensUsed,
+              metadata:
+                toolResultMeta || actionMeta
+                  ? JSON.stringify({ toolResult: toolResultMeta, actionRequest: actionMeta })
+                  : null,
+            },
+          });
+        }
+
+        send({
+          type: 'done',
+          tokensUsed,
+          provider,
+          conversationId,
+        });
+      } catch (err: any) {
+        console.error('[AI] Chat error:', err);
+        send({ type: 'error', message: err?.message || 'خطأ غير معروف' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Conversation-Id': conversationId,
+    },
+  });
+}

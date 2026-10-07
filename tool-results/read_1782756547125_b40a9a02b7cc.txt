@@ -1,0 +1,552 @@
+     1→'use client';
+     2→
+     3→import { useState, useEffect, useRef } from 'react';
+     4→import { Card, CardContent } from '@/components/ui/card';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Input } from '@/components/ui/input';
+     7→import { Label } from '@/components/ui/label';
+     8→import { Badge } from '@/components/ui/badge';
+     9→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+    10→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    11→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    12→import { Textarea } from '@/components/ui/textarea';
+    13→import {
+    14→  Plus, Search, Edit, Trash2, BarChart3, Download, Upload, Image as ImageIcon, X, Loader2, CalendarClock, Wallet, Banknote,
+    15→} from 'lucide-react';
+    16→import { useToast } from '@/hooks/use-toast';
+    17→import { StudentStatsModal } from '@/components/common/student-stats-modal';
+    18→import { InstallmentPlanModal } from '@/components/common/installment-plan-modal';
+    19→
+    20→interface Student {
+    21→  id: string;
+    22→  studentNumber: string | null;
+    23→  name: string;
+    24→  email: string | null;
+    25→  phone: string | null;
+    26→  gender: string | null;
+    27→  photoUrl: string | null;
+    28→  departmentId: string | null;
+    29→  levelId: string | null;
+    30→  specializationId: string | null;
+    31→  section: string | null;
+    32→  specialty: string | null;
+    33→  courseStartDate: string | null;
+    34→  totalAmount: number | null;
+    35→  initialPayment: number | null;
+    36→  status: string;
+    37→  notes: string | null;
+    38→  registrationDate: string;
+    39→  department?: { name: string; hasInstallments: boolean; installmentMonths: number | null };
+    40→  level?: { name: string };
+    41→  specialization?: { name: string };
+    42→}
+    43→
+    44→interface Department {
+    45→  id: string; name: string; code: string | null;
+    46→  isFixed: boolean; hasInstallments: boolean; installmentMonths: number | null;
+    47→  defaultMonthlyAmount: number | null;
+    48→}
+    49→interface Level { id: string; name: string; }
+    50→interface Specialization { id: string; name: string; departmentId: string; }
+    51→
+    52→const STUDENT_STATUSES = [
+    53→  { value: 'registered', label: 'مسجل' },
+    54→  { value: 'continuing', label: 'مستمر' },
+    55→  { value: 'abandoned', label: 'متخلي' },
+    56→  { value: 'postponed', label: 'مؤجل' },
+    57→  { value: 'graduated', label: 'متخرج' },
+    58→];
+    59→
+    60→const getStatusLabel = (s: string) => STUDENT_STATUSES.find(st => st.value === s)?.label || s;
+    61→
+    62→const empty = {
+    63→  name: '', email: '', phone: '', gender: 'ذكر',
+    64→  departmentId: '', levelId: '', specializationId: '',
+    65→  section: '', specialty: '', college: '', notes: '',
+    66→  status: 'registered', photoUrl: '',
+    67→  birthDate: '', address: '', courseStartDate: '',
+    68→  totalAmount: '', initialPayment: '',
+    69→};
+    70→
+    71→export function StudentsSection({ isDirector = false }: { isDirector?: boolean }) {
+    72→  const [students, setStudents] = useState<Student[]>([]);
+    73→  const [departments, setDepartments] = useState<Department[]>([]);
+    74→  const [levels, setLevels] = useState<Level[]>([]);
+    75→  const [specializations, setSpecializations] = useState<Specialization[]>([]);
+    76→  const [loading, setLoading] = useState(true);
+    77→  const [search, setSearch] = useState('');
+    78→  const [filterDept, setFilterDept] = useState('all');
+    79→  const [filterSpec, setFilterSpec] = useState('all');
+    80→  const [filterStatus, setFilterStatus] = useState('all');
+    81→
+    82→  const [dialogOpen, setDialogOpen] = useState(false);
+    83→  const [editing, setEditing] = useState<Student | null>(null);
+    84→  const [formData, setFormData] = useState<any>(empty);
+    85→
+    86→  const [photoUploading, setPhotoUploading] = useState(false);
+    87→  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    88→  const fileInputRef = useRef<HTMLInputElement>(null);
+    89→
+    90→  const [statsModal, setStatsModal] = useState<{ open: boolean; studentId: string | null }>({ open: false, studentId: null });
+    91→  const [installmentModal, setInstallmentModal] = useState<{ open: boolean; studentId: string | null }>({ open: false, studentId: null });
+    92→
+    93→  const { toast } = useToast();
+    94→
+    95→  const load = async () => {
+    96→    setLoading(true);
+    97→    const params = new URLSearchParams();
+    98→    if (search) params.set('search', search);
+    99→    if (filterDept !== 'all') params.set('departmentId', filterDept);
+   100→    if (filterSpec !== 'all') params.set('specializationId', filterSpec);
+   101→    if (filterStatus !== 'all') params.set('status', filterStatus);
+   102→    const res = await fetch(`/api/students?${params.toString()}`);
+   103→    const data = await res.json();
+   104→    setStudents(data.students || []);
+   105→    setLoading(false);
+   106→  };
+   107→
+   108→  const loadFilters = async () => {
+   109→    const [d, l, s] = await Promise.all([
+   110→      fetch('/api/departments').then(r => r.json()),
+   111→      fetch('/api/levels').then(r => r.json()),
+   112→      fetch('/api/specializations').then(r => r.json()),
+   113→    ]);
+   114→    setDepartments(d.departments || []);
+   115→    setLevels(l.levels || []);
+   116→    setSpecializations(s.specializations || []);
+   117→  };
+   118→
+   119→  useEffect(() => { loadFilters(); }, []);
+   120→  useEffect(() => { load(); }, [search, filterDept, filterSpec, filterStatus]);
+   121→
+   122→  // Specializations filtered by selected department
+   123→  const availableSpecializations = formData.departmentId
+   124→    ? specializations.filter(s => s.departmentId === formData.departmentId)
+   125→    : [];
+   126→
+   127→  // Get the selected department to check if it has installments (التقني سامي)
+   128→  const selectedDept = departments.find(d => d.id === formData.departmentId);
+   129→  const hasInstallments = selectedDept?.hasInstallments || false;
+   130→
+   131→  const handlePhotoUpload = async (file: File) => {
+   132→    if (!file) return;
+   133→    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+   134→    if (!allowedTypes.includes(file.type)) {
+   135→      toast({ title: 'خطأ', description: 'نوع الملف غير مدعوم', variant: 'destructive' });
+   136→      return;
+   137→    }
+   138→    if (file.size > 5 * 1024 * 1024) {
+   139→      toast({ title: 'خطأ', description: 'حجم الملف كبير جداً (حد أقصى 5 ميجا)', variant: 'destructive' });
+   140→      return;
+   141→    }
+   142→    setPhotoUploading(true);
+   143→    try {
+   144→      const fd = new FormData();
+   145→      fd.append('file', file);
+   146→      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+   147→      const data = await res.json();
+   148→      if (!res.ok) {
+   149→        toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
+   150→        return;
+   151→      }
+   152→      setFormData((prev: any) => ({ ...prev, photoUrl: data.url }));
+   153→      setPhotoPreview(data.url);
+   154→      toast({ title: 'تم', description: 'تم رفع الصورة' });
+   155→    } catch (e) {
+   156→      toast({ title: 'خطأ', description: 'تعذر رفع الصورة', variant: 'destructive' });
+   157→    } finally {
+   158→      setPhotoUploading(false);
+   159→    }
+   160→  };
+   161→
+   162→  const handleRemovePhoto = () => {
+   163→    setFormData((prev: any) => ({ ...prev, photoUrl: '' }));
+   164→    setPhotoPreview(null);
+   165→    if (fileInputRef.current) fileInputRef.current.value = '';
+   166→  };
+   167→
+   168→  const handleOpenAdd = () => {
+   169→    setEditing(null);
+   170→    setFormData(empty);
+   171→    setPhotoPreview(null);
+   172→    setDialogOpen(true);
+   173→  };
+   174→
+   175→  const handleOpenEdit = (s: Student) => {
+   176→    setEditing(s);
+   177→    setFormData({
+   178→      name: s.name, email: s.email || '', phone: s.phone || '', gender: s.gender || 'ذكر',
+   179→      departmentId: s.departmentId || '', levelId: s.levelId || '',
+   180→      specializationId: s.specializationId || '',
+   181→      section: s.section || '', specialty: s.specialty || '', college: s.college || '',
+   182→      notes: s.notes || '', status: s.status, photoUrl: s.photoUrl || '',
+   183→      birthDate: '', address: '',
+   184→      courseStartDate: s.courseStartDate ? s.courseStartDate.split('T')[0] : '',
+   185→      totalAmount: s.totalAmount ? String(s.totalAmount) : '',
+   186→      initialPayment: s.initialPayment ? String(s.initialPayment) : '',
+   187→    });
+   188→    setPhotoPreview(s.photoUrl || null);
+   189→    setDialogOpen(true);
+   190→  };
+   191→
+   192→  const handleSave = async () => {
+   193→    if (!formData.name.trim()) {
+   194→      toast({ title: 'تنبيه', description: 'اسم الطالب مطلوب', variant: 'destructive' });
+   195→      return;
+   196→    }
+   197→    try {
+   198→      const url = editing ? `/api/students/${editing.id}` : '/api/students';
+   199→      const method = editing ? 'PUT' : 'POST';
+   200→      const res = await fetch(url, {
+   201→        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+   202→      });
+   203→      const data = await res.json();
+   204→      if (!res.ok) {
+   205→        toast({ title: 'خطأ', description: data.error || 'فشل الحفظ', variant: 'destructive' });
+   206→        return;
+   207→      }
+   208→      toast({ title: 'تم', description: editing ? 'تم تحديث الطالب' : 'تمت إضافة الطالب' });
+   209→      setDialogOpen(false);
+   210→      setPhotoPreview(null);
+   211→      if (fileInputRef.current) fileInputRef.current.value = '';
+   212→      load();
+   213→    } catch (e) {
+   214→      toast({ title: 'خطأ', description: 'تعذر الاتصال بالخادم', variant: 'destructive' });
+   215→    }
+   216→  };
+   217→
+   218→  const handleDelete = async (s: Student) => {
+   219→    if (!confirm(`هل أنت متأكد من حذف الطالب "${s.name}"؟`)) return;
+   220→    const res = await fetch(`/api/students/${s.id}`, { method: 'DELETE' });
+   221→    if (res.ok) {
+   222→      toast({ title: 'تم', description: 'تم حذف الطالب' });
+   223→      load();
+   224→    } else {
+   225→      toast({ title: 'خطأ', description: 'تعذر الحذف', variant: 'destructive' });
+   226→    }
+   227→  };
+   228→
+   229→  return (
+   230→    <div className="space-y-4">
+   231→      <div className="flex flex-wrap items-center justify-between gap-3">
+   232→        <div>
+   233→          <h2 className="text-2xl font-bold">إدارة الطلاب</h2>
+   234→          <p className="text-muted-foreground text-sm">إجمالي: {students.length} طالب</p>
+   235→        </div>
+   236→        <div className="flex gap-2">
+   237→          <Button variant="outline" size="sm" onClick={() => window.open('/api/export/students', '_blank')}>
+   238→            <Download className="w-4 h-4 ml-2" /> تصدير Excel
+   239→          </Button>
+   240→          <Button onClick={handleOpenAdd}>
+   241→            <Plus className="w-4 h-4 ml-2" /> إضافة طالب
+   242→          </Button>
+   243→        </div>
+   244→      </div>
+   245→
+   246→      <Card>
+   247→        <CardContent className="p-4">
+   248→          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+   249→            <div className="relative">
+   250→              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   251→              <Input placeholder="بحث بالاسم أو الرقم..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
+   252→            </div>
+   253→            <Select value={filterDept} onValueChange={(v) => { setFilterDept(v); setFilterSpec('all'); }}>
+   254→              <SelectTrigger><SelectValue placeholder="كل الأقسام" /></SelectTrigger>
+   255→              <SelectContent>
+   256→                <SelectItem value="all">كل الأقسام</SelectItem>
+   257→                {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+   258→              </SelectContent>
+   259→            </Select>
+   260→            <Select value={filterSpec} onValueChange={setFilterSpec}>
+   261→              <SelectTrigger><SelectValue placeholder="كل التخصصات" /></SelectTrigger>
+   262→              <SelectContent>
+   263→                <SelectItem value="all">كل التخصصات</SelectItem>
+   264→                {filterDept !== 'all' && specializations.filter(s => s.departmentId === filterDept).map(s => (
+   265→                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+   266→                ))}
+   267→              </SelectContent>
+   268→            </Select>
+   269→            <Select value={filterStatus} onValueChange={setFilterStatus}>
+   270→              <SelectTrigger><SelectValue /></SelectTrigger>
+   271→              <SelectContent>
+   272→                <SelectItem value="all">كل الحالات</SelectItem>
+   273→                {STUDENT_STATUSES.map(st => <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>)}
+   274→              </SelectContent>
+   275→            </Select>
+   276→          </div>
+   277→        </CardContent>
+   278→      </Card>
+   279→
+   280→      <Card>
+   281→        <CardContent className="p-0">
+   282→          <div className="overflow-x-auto">
+   283→            <Table>
+   284→              <TableHeader>
+   285→                <TableRow>
+   286→                  <TableHead className="w-12">#</TableHead>
+   287→                  <TableHead className="text-center w-16">الصورة</TableHead>
+   288→                  <TableHead>رقم الطالب</TableHead>
+   289→                  <TableHead>الاسم واللقب</TableHead>
+   290→                  <TableHead>القسم</TableHead>
+   291→                  <TableHead>التخصص</TableHead>
+   292→                  <TableHead>الهاتف</TableHead>
+   293→                  <TableHead>الحالة</TableHead>
+   294→                  <TableHead className="text-center">إجراءات</TableHead>
+   295→                </TableRow>
+   296→              </TableHeader>
+   297→              <TableBody>
+   298→                {loading ? (
+   299→                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
+   300→                ) : students.length === 0 ? (
+   301→                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">لا يوجد طلاب</TableCell></TableRow>
+   302→                ) : students.map((s, i) => (
+   303→                  <TableRow key={s.id} className="hover:bg-muted/50">
+   304→                    <TableCell className="num text-muted-foreground">{i + 1}</TableCell>
+   305→                    <TableCell className="text-center">
+   306→                      {s.photoUrl ? (
+   307→                        <div className="flex justify-center">
+   308→                          <img src={s.photoUrl} alt={s.name} className="w-10 h-10 rounded-full object-cover border border-primary/30" />
+   309→                        </div>
+   310→                      ) : (
+   311→                        <div className="flex justify-center">
+   312→                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+   313→                            <ImageIcon className="w-4 h-4" />
+   314→                          </div>
+   315→                        </div>
+   316→                      )}
+   317→                    </TableCell>
+   318→                    <TableCell className="font-mono text-xs num">{s.studentNumber || '-'}</TableCell>
+   319→                    <TableCell className="font-medium">{s.name}</TableCell>
+   320→                    <TableCell>
+   321→                      {s.department?.name || '-'}
+   322→                      {s.department?.hasInstallments && (
+   323→                        <Badge variant="secondary" className="mr-1 text-[10px]">30 شهر</Badge>
+   324→                      )}
+   325→                    </TableCell>
+   326→                    <TableCell className="text-sm">{s.specialization?.name || s.specialty || '-'}</TableCell>
+   327→                    <TableCell className="num text-xs">{s.phone || '-'}</TableCell>
+   328→                    <TableCell>
+   329→                      <Badge variant={
+   330→                        s.status === 'registered' ? 'default' :
+   331→                        s.status === 'continuing' ? 'secondary' :
+   332→                        s.status === 'graduated' ? 'outline' :
+   333→                        s.status === 'abandoned' ? 'destructive' :
+   334→                        'secondary'
+   335→                      }>
+   336→                        {getStatusLabel(s.status)}
+   337→                      </Badge>
+   338→                    </TableCell>
+   339→                    <TableCell>
+   340→                      <div className="flex items-center justify-center gap-1">
+   341→                        <Button size="sm" variant="ghost" onClick={() => setStatsModal({ open: true, studentId: s.id })} title="إحصائيات">
+   342→                          <BarChart3 className="w-4 h-4 text-blue-600" />
+   343→                        </Button>
+   344→                        {s.department?.hasInstallments && (
+   345→                          <Button size="sm" variant="ghost" onClick={() => setInstallmentModal({ open: true, studentId: s.id })} title="جدول الأقساط">
+   346→                            <CalendarClock className="w-4 h-4 text-orange-600" />
+   347→                          </Button>
+   348→                        )}
+   349→                        <Button size="sm" variant="ghost" onClick={() => handleOpenEdit(s)} title="تعديل">
+   350→                          <Edit className="w-4 h-4 text-amber-600" />
+   351→                        </Button>
+   352→                        <Button size="sm" variant="ghost" onClick={() => handleDelete(s)} title="حذف">
+   353→                          <Trash2 className="w-4 h-4 text-red-600" />
+   354→                        </Button>
+   355→                      </div>
+   356→                    </TableCell>
+   357→                  </TableRow>
+   358→                ))}
+   359→              </TableBody>
+   360→            </Table>
+   361→          </div>
+   362→        </CardContent>
+   363→      </Card>
+   364→
+   365→      <Dialog open={dialogOpen} onOpenChange={(v) => {
+   366→        setDialogOpen(v);
+   367→        if (!v) {
+   368→          setPhotoPreview(null);
+   369→          if (fileInputRef.current) fileInputRef.current.value = '';
+   370→        }
+   371→      }}>
+   372→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+   373→          <DialogHeader>
+   374→            <DialogTitle>{editing ? 'تعديل بيانات الطالب' : 'إضافة طالب جديد'}</DialogTitle>
+   375→          </DialogHeader>
+   376→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+   377→            {/* Photo upload */}
+   378→            <div className="md:col-span-2">
+   379→              <Label>صورة الطالب</Label>
+   380→              <div className="flex items-start gap-4 p-3 border-2 border-dashed border-border rounded-lg bg-muted/30">
+   381→                <div className="flex-shrink-0">
+   382→                  {photoPreview ? (
+   383→                    <div className="relative">
+   384→                      <img src={photoPreview} alt="معاينة" className="w-20 h-20 rounded-lg object-cover border-2 border-primary/30" />
+   385→                      <button type="button" onClick={handleRemovePhoto} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center">
+   386→                        <X className="w-3 h-3" />
+   387→                      </button>
+   388→                    </div>
+   389→                  ) : (
+   390→                    <div className="w-20 h-20 rounded-lg bg-muted border-2 border-dashed border-border flex items-center justify-center text-muted-foreground">
+   391→                      <ImageIcon className="w-6 h-6" />
+   392→                    </div>
+   393→                  )}
+   394→                </div>
+   395→                <div className="flex-1 space-y-1">
+   396→                  <input
+   397→                    ref={fileInputRef}
+   398→                    type="file"
+   399→                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+   400→                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); }}
+   401→                    className="hidden"
+   402→                  />
+   403→                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={photoUploading}>
+   404→                    {photoUploading ? <><Loader2 className="w-4 h-4 ml-2 animate-spin" /> جاري الرفع...</> : <><Upload className="w-4 h-4 ml-2" /> {photoPreview ? 'تغيير الصورة' : 'رفع صورة'}</>}
+   405→                  </Button>
+   406→                  <p className="text-xs text-muted-foreground">JPG, PNG, WEBP, GIF - حد أقصى 5 ميجا</p>
+   407→                </div>
+   408→              </div>
+   409→            </div>
+   410→
+   411→            <div className="space-y-2 md:col-span-2">
+   412→              <Label>الاسم واللقب *</Label>
+   413→              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="مثال: أحمد بن محمد" />
+   414→            </div>
+   415→            <div className="space-y-2">
+   416→              <Label>الجنس</Label>
+   417→              <Select value={formData.gender} onValueChange={(v) => setFormData({ ...formData, gender: v })}>
+   418→                <SelectTrigger><SelectValue /></SelectTrigger>
+   419→                <SelectContent>
+   420→                  <SelectItem value="ذكر">ذكر</SelectItem>
+   421→                  <SelectItem value="أنثى">أنثى</SelectItem>
+   422→                </SelectContent>
+   423→              </Select>
+   424→            </div>
+   425→            <div className="space-y-2">
+   426→              <Label>الهاتف</Label>
+   427→              <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0770..." dir="ltr" />
+   428→            </div>
+   429→            <div className="space-y-2">
+   430→              <Label>القسم</Label>
+   431→              <Select value={formData.departmentId} onValueChange={(v) => setFormData({ ...formData, departmentId: v, specializationId: '' })}>
+   432→                <SelectTrigger><SelectValue placeholder="اختر القسم" /></SelectTrigger>
+   433→                <SelectContent>
+   434→                  {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}{d.hasInstallments && ' (أقساط شهرية)'}</SelectItem>)}
+   435→                </SelectContent>
+   436→              </Select>
+   437→            </div>
+   438→            <div className="space-y-2">
+   439→              <Label>التخصص (الشعبة)</Label>
+   440→              <Select value={formData.specializationId} onValueChange={(v) => setFormData({ ...formData, specializationId: v })} disabled={!formData.departmentId}>
+   441→                <SelectTrigger><SelectValue placeholder={formData.departmentId ? 'اختر التخصص' : 'اختر القسم أولاً'} /></SelectTrigger>
+   442→                <SelectContent>
+   443→                  {availableSpecializations.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+   444→                </SelectContent>
+   445→              </Select>
+   446→            </div>
+   447→            <div className="space-y-2">
+   448→              <Label>المستوى</Label>
+   449→              <Select value={formData.levelId} onValueChange={(v) => setFormData({ ...formData, levelId: v })}>
+   450→                <SelectTrigger><SelectValue placeholder="اختر المستوى" /></SelectTrigger>
+   451→                <SelectContent>
+   452→                  {levels.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+   453→                </SelectContent>
+   454→              </Select>
+   455→            </div>
+   456→            <div className="space-y-2">
+   457→              <Label>الحالة</Label>
+   458→              <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+   459→                <SelectTrigger><SelectValue /></SelectTrigger>
+   460→                <SelectContent>
+   461→                  {STUDENT_STATUSES.map(st => <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>)}
+   462→                </SelectContent>
+   463→              </Select>
+   464→            </div>
+   465→
+   466→            {/* Course start date + total amount + initial payment - shown for installment departments (التقني سامي) */}
+   467→            {hasInstallments && (
+   468→              <>
+   469→                <div className="space-y-2 md:col-span-2">
+   470→                  <Label className="flex items-center gap-1">
+   471→                    <CalendarClock className="w-4 h-4 text-orange-600" />
+   472→                    تاريخ بداية الدورة (لحساب الأقساط الـ {selectedDept?.installmentMonths || 30} شهر)
+   473→                  </Label>
+   474→                  <Input
+   475→                    type="date"
+   476→                    value={formData.courseStartDate}
+   477→                    onChange={(e) => setFormData({ ...formData, courseStartDate: e.target.value })}
+   478→                    dir="ltr"
+   479→                  />
+   480→                </div>
+   481→                <div className="space-y-2">
+   482→                  <Label className="flex items-center gap-1">
+   483→                    <Wallet className="w-4 h-4 text-primary" />
+   484→                    المبلغ الإجمالي للدورة (دج) *
+   485→                  </Label>
+   486→                  <Input
+   487→                    type="number"
+   488→                    value={formData.totalAmount}
+   489→                    onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
+   490→                    placeholder="مثال: 90000"
+   491→                    dir="ltr"
+   492→                  />
+   493→                </div>
+   494→                <div className="space-y-2">
+   495→                  <Label className="flex items-center gap-1">
+   496→                    <Banknote className="w-4 h-4 text-emerald-600" />
+   497→                    الدفعة الأولية (دج)
+   498→                  </Label>
+   499→                  <Input
+   500→                    type="number"
+   501→                    value={formData.initialPayment}
+   502→                    onChange={(e) => setFormData({ ...formData, initialPayment: e.target.value })}
+   503→                    placeholder="مثال: 10000"
+   504→                    dir="ltr"
+   505→                  />
+   506→                </div>
+   507→                <div className="md:col-span-2 p-3 bg-orange-50/50 border border-orange-200 rounded-lg">
+   508→                  <p className="text-xs text-orange-800">
+   509→                    <strong>طريقة حساب الأقساط:</strong>
+   510→                    {formData.totalAmount && formData.initialPayment ? (
+   511→                      <>
+   512→                        {' '}المبلغ الإجمالي ({Number(formData.totalAmount).toLocaleString()} دج) - الدفعة الأولية ({Number(formData.initialPayment).toLocaleString()} دج) = {Number(formData.totalAmount - formData.initialPayment).toLocaleString()} دج
+   513→                        {' ÷ '}{selectedDept?.installmentMonths || 30} شهر = <strong>{Math.round((Number(formData.totalAmount) - Number(formData.initialPayment)) / (selectedDept?.installmentMonths || 30)).toLocaleString()} دج/شهر</strong>
+   514→                      </>
+   515→                    ) : formData.totalAmount ? (
+   516→                      <>
+   517→                        {' '}المبلغ الإجمالي ({Number(formData.totalAmount).toLocaleString()} دج) ÷ {selectedDept?.installmentMonths || 30} شهر = <strong>{Math.round(Number(formData.totalAmount) / (selectedDept?.installmentMonths || 30)).toLocaleString()} دج/شهر</strong>
+   518→                      </>
+   519→                    ) : (
+   520→                      ' سيتم استخدام القسط الشهري الافتراضي للقسم: ' + (selectedDept?.defaultMonthlyAmount || 0) + ' دج'
+   521→                    )}
+   522→                  </p>
+   523→                </div>
+   524→              </>
+   525→            )}
+   526→
+   527→            <div className="space-y-2">
+   528→              <Label>البريد الإلكتروني</Label>
+   529→              <Input value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@example.com" dir="ltr" />
+   530→            </div>
+   531→            <div className="space-y-2">
+   532→              <Label>الكلية/الجامعة</Label>
+   533→              <Input value={formData.college} onChange={(e) => setFormData({ ...formData, college: e.target.value })} />
+   534→            </div>
+   535→            <div className="space-y-2 md:col-span-2">
+   536→              <Label>ملاحظات</Label>
+   537→              <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={2} />
+   538→            </div>
+   539→          </div>
+   540→          <DialogFooter>
+   541→            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
+   542→            <Button onClick={handleSave}>{editing ? 'حفظ التعديلات' : 'إضافة'}</Button>
+   543→          </DialogFooter>
+   544→        </DialogContent>
+   545→      </Dialog>
+   546→
+   547→      <StudentStatsModal open={statsModal.open} studentId={statsModal.studentId} onClose={() => setStatsModal({ open: false, studentId: null })} />
+   548→      <InstallmentPlanModal open={installmentModal.open} studentId={installmentModal.studentId} onClose={() => setInstallmentModal({ open: false, studentId: null })} />
+   549→    </div>
+   550→  );
+   551→}
+   552→

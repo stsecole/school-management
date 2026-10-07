@@ -1,0 +1,36 @@
+
+> nextjs_tailwind_shadcn_ts@0.2.0 build
+> prisma generate && next build
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v6.19.3) to .\node_modules\@prisma\client in 253ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+▲ Next.js 16.2.9 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./src/app/api/qr/route.ts:2:1
+Module not found: Can't resolve 'qrcode'
+  [90m1 |[0m [36mimport[0m { [33mNextRequest[0m, [33mNextResponse[0m } [36mfrom[0m [32m'next/server'[0m;
+[31m[1m>[0m [90m2 |[0m [36mimport[0m [33mQRCode[0m [36mfrom[0m [32m'qrcode'[0m;
+  [90m  |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m3 |[0m [36mimport[0m { requireAuth } [36mfrom[0m [32m'@/lib/auth'[0m;
+  [90m4 |[0m
+  [90m5 |[0m [90m// GET /api/qr?data=<text> - generate a QR code PNG image[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (./src/app/api/qr/route.ts:2:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
