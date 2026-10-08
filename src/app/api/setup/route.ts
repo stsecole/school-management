@@ -1,41 +1,37 @@
+
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
 
 export async function GET() {
+  // 1. اختبار وجود متغير البيئة
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    return NextResponse.json({ error: 'DATABASE_URL is missing in Vercel!' }, { status: 500 });
+  }
+
+  // 2. محاولة الاتصال بقاعدة البيانات
+  const prisma = new PrismaClient();
   try {
-    // كلمة المرور المشفّرة لـ "admin123"
-    const hashedPassword = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi';
-
-    // تأكد من وجود الجداول، ثم أنشئ المدير
-    const admin = await db.user.upsert({
-      where: { username: 'admin' },
-      update: { password: hashedPassword, role: 'director', name: 'المدير العام' },
-      create: {
-        id: 'admin_001',
-        username: 'admin',
-        password: hashedPassword,
-        name: 'المدير العام',
-        role: 'director',
-      },
-    });
-
+    // محاولة بسيطة لجلب المستخدمين
+    const users = await prisma.user.findMany();
+    
     return NextResponse.json({
       success: true,
-      message: '✅ تم إنشاء حساب المدير بنجاح!',
-      credentials: {
-        username: 'admin',
-        password: 'admin123',
-      },
-      user: { id: admin.id, name: admin.name, role: admin.role },
+      message: 'الاتصال ناجح!',
+      users_count: users.length,
+      users: users.map(u => ({ username: u.username, role: u.role }))
     });
   } catch (error: any) {
+    // إظهار الخطأ الحقيقي
     return NextResponse.json(
       { 
-        success: false, 
         error: error.message,
-        hint: "إذا فشل، تأكد من تشغيل 'npx prisma db push' لإنشاء الجداول أولاً"
-      },
+        code: error.code,
+        stack: error.stack
+      }, 
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
