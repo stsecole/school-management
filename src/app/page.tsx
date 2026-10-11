@@ -501,16 +501,16 @@ export default function Home() {
                    {activeSection === 'departments' && (
   <Suspense fallback={<SectionLoader />}>
 )}
-  {activeSection === 'departments' && (
-  <Suspense fallback={<SectionLoader />}>
-    <DepartmentsSection 
-      canCreate={user.role === 'director' || canAccess('departments', 'create')}
-      canEdit={user.role === 'director' || canAccess('departments', 'edit')}
-      canDelete={user.role === 'director' || canAccess('departments', 'delete')}
-    />
-  </Suspense>
-)}
+           {activeSection === 'departments' && (
+            <Suspense fallback={<SectionLoader />}>
+              <DepartmentsSection 
+                canCreate={user.role === 'director' || permissions?.departments?.canCreate === true}
+                canEdit={user.role === 'director' || permissions?.departments?.canEdit === true}
+                canDelete={user.role === 'director' || permissions?.departments?.canDelete === true}
+              />
+            </Suspense>
           )}
+        
           {activeSection === 'registrations' && (
             <Suspense fallback={<SectionLoader />}><RegistrationsSection /></Suspense>
           )}
