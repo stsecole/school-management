@@ -499,6 +499,9 @@ export default function Home() {
           )}
           {activeSection === 'departments' && (
   <Suspense fallback={<SectionLoader />}>
+)}
+  {activeSection === 'departments' && (
+  <Suspense fallback={<SectionLoader />}>
     <DepartmentsSection 
       canCreate={user.role === 'director' || canAccess('departments', 'create')}
       canEdit={user.role === 'director' || canAccess('departments', 'edit')}
