@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
-  Clock, Calendar, TrendingUp, Activity, Heart, X, Plus, Trash2, BarChart3, Users, Download,
+  Clock, Calendar, TrendingUp, Activity, Heart, X, Plus, Trash2, BarChart3, Users, Download, Edit, 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -75,7 +75,6 @@ export function TimesheetSection({ isDirector = false }: { isDirector?: boolean 
     </div>
   );
 }
-
 // ============ TIMESHEET RECORDS ============
 function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
   const [entries, setEntries] = useState<TimesheetEntry[]>([]);
@@ -83,7 +82,9 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
   const [loading, setLoading] = useState(true);
   const [filterUser, setFilterUser] = useState('all');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [filterDay, setFilterDay] = useState(''); // NEW: day filter
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // NEW: for editing
   const [formData, setFormData] = useState<any>({
     date: new Date().toISOString().split('T')[0],
     checkIn1: '08:00', checkOut1: '12:00',
@@ -93,14 +94,30 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
   });
   const { toast } = useToast();
 
+  // Helper: format date consistently as DD/MM/YYYY
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (isDirector && filterUser !== 'all') params.set('userId', filterUser);
     if (filterMonth) {
       const [y, m] = filterMonth.split('-').map(Number);
-      params.set('startDate', `${y}-${String(m).padStart(2, '0')}-01`);
-      params.set('endDate', `${y}-${String(m).padStart(2, '0')}-31`);
+      // If day is selected, filter by specific day; otherwise, filter by month
+      if (filterDay) {
+        const day = String(filterDay).padStart(2, '0');
+        params.set('startDate', `${y}-${String(m).padStart(2, '0')}-${day}`);
+        params.set('endDate', `${y}-${String(m).padStart(2, '0')}-${day}`);
+      } else {
+        params.set('startDate', `${y}-${String(m).padStart(2, '0')}-01`);
+        params.set('endDate', `${y}-${String(m).padStart(2, '0')}-31`);
+      }
     }
     const res = await fetch(`/api/timesheet?${params.toString()}`);
     const data = await res.json();
@@ -114,7 +131,7 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
     }
   }, [isDirector]);
 
-  useEffect(() => { load(); }, [filterUser, filterMonth]);
+  useEffect(() => { load(); }, [filterUser, filterMonth, filterDay]);
 
   // Calculate live hours
   const liveHours = useMemo(() => {
@@ -144,20 +161,41 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
   const handleSave = async () => {
     const payload = {
       ...formData,
-      userId: isDirector ? filterUser !== 'all' ? filterUser : undefined : undefined,
+      id: editingId || undefined,
+      userId: isDirector ? (filterUser !== 'all' ? filterUser : undefined) : undefined,
     };
-    const res = await fetch('/api/timesheet', {
-      method: 'POST',
+    const method = editingId ? 'PUT' : 'POST';
+    const url = editingId ? `/api/timesheet/${editingId}` : '/api/timesheet';
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (res.ok) {
-      toast({ title: 'تم', description: 'تم حفظ سجل الحضور' });
+      toast({ title: 'تم', description: editingId ? 'تم تعديل السجل' : 'تم حفظ سجل الحضور' });
       setDialogOpen(false);
+      setEditingId(null);
       load();
     } else {
       toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
     }
+  };
+
+  const handleEdit = (entry: TimesheetEntry) => {
+    setEditingId(entry.id);
+    setFormData({
+      date: new Date(entry.date).toISOString().split('T')[0],
+      checkIn1: entry.checkIn1 || '08:00',
+      checkOut1: entry.checkOut1 || '12:00',
+      checkIn2: entry.checkIn2 || '13:00',
+      checkOut2: entry.checkOut2 || '17:00',
+      status: entry.status || 'present',
+      notes: entry.notes || '',
+      sickHours: entry.sickHours ? String(entry.sickHours) : '',
+      leaveHours: entry.leaveHours ? String(entry.leaveHours) : '',
+      overtimeHours: entry.overtimeHours ? String(entry.overtimeHours) : '',
+    });
+    setDialogOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -213,8 +251,29 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
                 </SelectContent>
               </Select>
             )}
-            <Input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} dir="ltr" className="max-w-xs" />
-            <Button onClick={() => { setFormData({ date: new Date().toISOString().split('T')[0], checkIn1: '08:00', checkOut1: '12:00', checkIn2: '13:00', checkOut2: '17:00', status: 'present', notes: '', sickHours: '', leaveHours: '', overtimeHours: '' }); setDialogOpen(true); }}>
+            {/* Month filter */}
+            <Input type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} dir="ltr" className="max-w-[160px]" />
+            {/* Day filter - NEW */}
+            <Select value={filterDay} onValueChange={(v) => setFilterDay(v === 'all' ? '' : v)}>
+              <SelectTrigger className="max-w-[120px]"><SelectValue placeholder="كل الأيام" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الأيام</SelectItem>
+                {Array.from({ length: 31 }, (_, i) => String(i + 1)).map(d => (
+                  <SelectItem key={d} value={d}>اليوم {d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={() => {
+              setEditingId(null);
+              setFormData({
+                date: new Date().toISOString().split('T')[0],
+                checkIn1: '08:00', checkOut1: '12:00',
+                checkIn2: '13:00', checkOut2: '17:00',
+                status: 'present', notes: '',
+                sickHours: '', leaveHours: '', overtimeHours: '',
+              });
+              setDialogOpen(true);
+            }}>
               <Plus className="w-4 h-4 ml-2" /> تسجيل حضور
             </Button>
           </div>
@@ -225,13 +284,13 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <div style={{ minWidth: isDirector ? '960px' : '820px' }}>
+            <div style={{ minWidth: isDirector ? '1000px' : '860px' }}>
               {/* Header */}
               <div
                 className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
                 style={{ gridTemplateColumns: isDirector
-                  ? '40px 100px 80px 1fr 130px 130px 70px 70px 100px 60px'
-                  : '40px 100px 80px 130px 130px 70px 70px 100px 60px' }}
+                  ? '40px 110px 80px 1fr 130px 130px 70px 70px 100px 80px'
+                  : '40px 110px 80px 130px 130px 70px 70px 100px 80px' }}
               >
                 <div className="text-center">#</div>
                 <div className="text-right">التاريخ</div>
@@ -255,11 +314,12 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
                   key={e.id}
                   className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
                   style={{ gridTemplateColumns: isDirector
-                    ? '40px 100px 80px 1fr 130px 130px 70px 70px 100px 60px'
-                    : '40px 100px 80px 130px 130px 70px 70px 100px 60px' }}
+                    ? '40px 110px 80px 1fr 130px 130px 70px 70px 100px 80px'
+                    : '40px 110px 80px 130px 130px 70px 70px 100px 80px' }}
                 >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
-                  <div className="text-right num text-sm">{new Date(e.date).toLocaleDateString('ar')}</div>
+                  {/* Fixed date format: DD/MM/YYYY */}
+                  <div className="text-right num text-sm" dir="ltr">{formatDate(e.date)}</div>
                   <div className="text-right text-sm">{DAYS[e.dayOfWeek]}</div>
                   {isDirector && <div className="text-right text-sm font-medium">{e.user?.name || '-'}</div>}
                   <div className="text-center num text-xs" dir="ltr">{e.checkIn1 || '-'} ← {e.checkOut1 || '-'}</div>
@@ -272,9 +332,15 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
                     </Badge>
                   </div>
                   <div className="text-center">
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)}>
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </Button>
+                    <div className="flex justify-center gap-1">
+                      {/* Edit button - NEW */}
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(e)} title="تعديل">
+                        <Edit className="w-4 h-4 text-amber-600" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(e.id)} title="حذف">
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -284,8 +350,8 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
                 <div
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
                   style={{ gridTemplateColumns: isDirector
-                    ? '40px 100px 80px 1fr 130px 130px 70px 70px 100px 60px'
-                    : '40px 100px 80px 130px 130px 70px 70px 100px 60px' }}
+                    ? '40px 110px 80px 1fr 130px 130px 70px 70px 100px 80px'
+                    : '40px 110px 80px 130px 130px 70px 70px 100px 80px' }}
                 >
                   <div className="text-left" style={{ gridColumn: isDirector ? '1 / span 6' : '1 / span 5' }}>
                     الإجمالي ({entries.length} يوم):
@@ -300,10 +366,10 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
         </CardContent>
       </Card>
 
-      {/* Add dialog */}
+      {/* Add/Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>تسجيل حضور</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? 'تعديل سجل الحضور' : 'تسجيل حضور'}</DialogTitle></DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
               <Label>التاريخ *</Label>
@@ -357,15 +423,14 @@ function TimesheetRecords({ isDirector }: { isDirector: boolean }) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>حفظ</Button>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setEditingId(null); }}>إلغاء</Button>
+            <Button onClick={handleSave}>{editingId ? 'حفظ التعديل' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
-
 // ============ STATS VIEW ============
 function StatsView({ isDirector }: { isDirector: boolean }) {
   const [data, setData] = useState<any>(null);
