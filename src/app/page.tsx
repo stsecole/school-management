@@ -498,7 +498,14 @@ export default function Home() {
             <Suspense fallback={<SectionLoader />}><TeachersSection isDirector={user.role === 'director'} /></Suspense>
           )}
           {activeSection === 'departments' && (
-            <Suspense fallback={<SectionLoader />}><DepartmentsSection isDirector={user.role === 'director'} /></Suspense>
+  <Suspense fallback={<SectionLoader />}>
+    <DepartmentsSection 
+      canCreate={user.role === 'director' || canAccess('departments', 'create')}
+      canEdit={user.role === 'director' || canAccess('departments', 'edit')}
+      canDelete={user.role === 'director' || canAccess('departments', 'delete')}
+    />
+  </Suspense>
+)}
           )}
           {activeSection === 'registrations' && (
             <Suspense fallback={<SectionLoader />}><RegistrationsSection /></Suspense>
