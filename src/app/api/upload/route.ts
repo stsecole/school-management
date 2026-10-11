@@ -5,7 +5,6 @@ import { put } from '@vercel/blob';
 /**
  * POST /api/upload
  * رفع صورة أو ملف إلى Vercel Blob
- * يستخدم لصور الطلاب والوثائق
  */
 export async function POST(request: NextRequest) {
   try {
