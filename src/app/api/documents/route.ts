@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/documents
- * رفع وثيقة جديدة (multipart/form-data)
+ * رفع وثيقة جديدة (multipart/form-data) - يستخدم Vercel Blob
  */
 export async function POST(request: NextRequest) {
   try {
@@ -82,20 +82,19 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // احفظ الملف
+    // رفع الملف إلى Vercel Blob
     const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'documents');
+    
+    // استيراد put من @vercel/blob
+    const { put } = await import('@vercel/blob');
+    
+    const blob = await put(`documents/${fileName}`, file, {
+      access: 'public',
+      addRandomSuffix: false,
+    });
 
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch {}
-
-    const filePath = path.join(uploadDir, fileName);
-    const bytes = await file.arrayBuffer();
-    await writeFile(filePath, new Uint8Array(bytes));
-
-    const url = `/uploads/documents/${fileName}`;
+    const url = blob.url;
 
     // احفظ في قاعدة البيانات
     const doc = await db.document.create({
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
         studentId: studentId || null,
         studentName: studentName || null,
         fileName: file.name,
-        filePath: url,
+        filePath: url, // الآن نحفظ رابط Vercel Blob
         fileSize: file.size,
         mimeType: file.type,
         description: description || null,
@@ -115,16 +114,14 @@ export async function POST(request: NextRequest) {
       include: { student: { select: { name: true, studentNumber: true } } },
     });
 
+    try { await db.activityLog.create({ data: { userId: user.id, userName: user.name, action: 'create', module: 'archive', description: 'رفع وثيقة: ' + title } }); } catch (e) {}
+
     return NextResponse.json({ document: doc });
   } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
-    }
     console.error('POST /api/documents error:', error);
-    return NextResponse.json({ error: 'خطأ في الخادم: ' + (error.message || '') }, { status: 500 });
+    return NextResponse.json({ error: 'خطأ في الخادم: ' + error.message }, { status: 500 });
   }
 }
-
 /**
  * DELETE /api/documents?id=xxx
  */
