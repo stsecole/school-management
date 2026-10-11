@@ -186,21 +186,22 @@ export default function Home() {
   // يجب أن تكون قبل أي return شرطي لاحترام قواعد Hooks
   const filteredSections = useMemo(() => {
     if (!user) return [];
-    const visibleSections = sections.filter(s => s.roles.includes(user.role));
-    const safeVisibleSections = visibleSections.length > 0 ? visibleSections : sections.filter(s => s.roles.includes(user.role));
+    // فلترة حسب الدور (director/employee)
+    let visibleSections = sections.filter(s => s.roles.includes(user.role));
+    
+    // فلترة إضافية حسب الصلاحيات المخصصة (RBAC)
+    if (allowedSections && allowedSections.length > 0) {
+      visibleSections = visibleSections.filter(s => allowedSections.includes(s.id));
+    }
+    
+    const safeVisibleSections = visibleSections.length > 0 ? visibleSections : [];
     const q = sectionSearch.trim().toLowerCase();
     if (!q) return safeVisibleSections;
     return safeVisibleSections.filter(s =>
       s.label.toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q)
     );
-  }, [user, sectionSearch]);
-
-  const handleSelectSection = (id: Section) => {
-    setActiveSection(id);
-    setSidebarOpen(false);
-    setSectionSearch(''); // مسح البحث بعد الاختيار
-  };
+  }, [user, sectionSearch, allowedSections]);
 
   if (loading) {
     return (
