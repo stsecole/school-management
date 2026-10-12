@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, BookOpen, Lock, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Specialization { id: string; name: string; departmentId: string; }
@@ -105,12 +105,6 @@ export function DepartmentsSection({ canCreate = false, canEdit = false, canDele
         )}
       </div>
 
-      {!canCreate && !canEdit && !canDelete && (
-        <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-lg flex items-center gap-2 text-sm">
-          <AlertCircle className="w-4 h-4" />
-          <span>لديك صلاحية الاطلاع فقط. التعديل والإضافة متاح للمدير أو حسب الصلاحيات الممنوحة.</span>
-        </div>
-      )}
 
       <Card>
         <CardContent className="p-0">
