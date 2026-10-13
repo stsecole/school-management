@@ -18,6 +18,7 @@ import { PWAInstall } from '@/components/pwa-install';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BranchSelector } from '@/components/branch-selector';
 import { GlobalSearch } from '@/components/global-search';
+import { getUserPermissions, getAllowedSections, canAccess } from '@/lib/permissions';
 
 // ===== Lazy load heavy sections (improves initial page load by ~50%) =====
 const StudentsSection = lazy(() => import('@/components/sections/students-section').then(m => ({ default: m.StudentsSection })));
@@ -111,7 +112,6 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [allowedSections, setAllowedSections] = useState<string[] | null>(null);
-  const [permissions, setPermissions] = useState<any>({});
   const [sectionSearch, setSectionSearch] = useState('');
   const [notifCount, setNotifCount] = useState(0);
   const [institution, setInstitution] = useState<{ name: string; tagline: string; logoUrl: string }>({
@@ -164,11 +164,10 @@ export default function Home() {
         setUser(data.user || null);
         if (data.user) {
           // اجلب الصلاحيات
-               try {
+          try {
             const permRes = await fetch('/api/my-permissions');
             const permData = await permRes.json();
             setAllowedSections(permData.allowedSections || null);
-            setPermissions(permData.permissions || {});
           } catch {
             setAllowedSections(null); // المدير له كل الصلاحيات
           }
@@ -187,22 +186,21 @@ export default function Home() {
   // يجب أن تكون قبل أي return شرطي لاحترام قواعد Hooks
   const filteredSections = useMemo(() => {
     if (!user) return [];
-    // فلترة حسب الدور (director/employee)
-    let visibleSections = sections.filter(s => s.roles.includes(user.role));
-    
-    // فلترة إضافية حسب الصلاحيات المخصصة (RBAC)
-    if (allowedSections && allowedSections.length > 0) {
-      visibleSections = visibleSections.filter(s => allowedSections.includes(s.id));
-    }
-    
-    const safeVisibleSections = visibleSections.length > 0 ? visibleSections : [];
+    const visibleSections = sections.filter(s => s.roles.includes(user.role));
+    const safeVisibleSections = visibleSections.length > 0 ? visibleSections : sections.filter(s => s.roles.includes(user.role));
     const q = sectionSearch.trim().toLowerCase();
     if (!q) return safeVisibleSections;
     return safeVisibleSections.filter(s =>
       s.label.toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q)
     );
-  }, [user, sectionSearch, allowedSections]);
+  }, [user, sectionSearch]);
+
+  const handleSelectSection = (id: Section) => {
+    setActiveSection(id);
+    setSidebarOpen(false);
+    setSectionSearch(''); // مسح البحث بعد الاختيار
+  };
 
   if (loading) {
     return (
@@ -498,15 +496,8 @@ export default function Home() {
           {activeSection === 'teachers' && (
             <Suspense fallback={<SectionLoader />}><TeachersSection isDirector={user.role === 'director'} /></Suspense>
           )}
-         {activeSection === 'departments' && (
-            <Suspense fallback={<SectionLoader />}>
-              <DepartmentsSection 
-                canCreate={user.role === 'director' || permissions?.departments?.canCreate === true}
-                canEdit={user.role === 'director' || permissions?.departments?.canEdit === true}
-                canDelete={user.role === 'director' || permissions?.departments?.canDelete === true}
-              />
-            </Suspense>
-          
+          {activeSection === 'departments' && (
+            <Suspense fallback={<SectionLoader />}><DepartmentsSection isDirector={user.role === 'director'} /></Suspense>
           )}
           {activeSection === 'registrations' && (
             <Suspense fallback={<SectionLoader />}><RegistrationsSection /></Suspense>
