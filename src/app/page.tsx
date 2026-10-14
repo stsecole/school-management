@@ -10,14 +10,8 @@ import {
   CalendarCheck, ListTodo, Wallet, LogOut, Menu, GraduationCap as School,
   AlertCircle, UserCog, Calendar, Clock, ScanLine, BarChart3, Database, UserPlus,
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
-  Loader2, Search, X, Award,
+  Loader2, Search, X, Award, Receipt,
 } from 'lucide-react';
-// ستجد استيرادات مثل:
-import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, ...,
-  Loader2, Search, X, Award,
-} from 'lucide-react';
-
 // فقط أضف Receipt إلى القائمة:
   Loader2, Search, X, Award, Receipt,
 } from 'lucide-react';
