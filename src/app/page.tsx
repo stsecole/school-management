@@ -12,6 +12,15 @@ import {
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
   Loader2, Search, X, Award,
 } from 'lucide-react';
+// ستجد استيرادات مثل:
+import {
+  LayoutDashboard, Users, GraduationCap, BookOpen, ...,
+  Loader2, Search, X, Award,
+} from 'lucide-react';
+
+// فقط أضف Receipt إلى القائمة:
+  Loader2, Search, X, Award, Receipt,
+} from 'lucide-react';
 import { LoginScreen } from '@/components/login-screen';
 import { DashboardStats } from '@/components/sections/dashboard-stats';
 import { PWAInstall } from '@/components/pwa-install';
@@ -50,6 +59,7 @@ const ActivityLogSection = lazy(() => import('@/components/sections/activity-log
 const StudentCardsSection = lazy(() => import('@/components/sections/student-cards-section').then(m => ({ default: m.StudentCardsSection })));
 const OperationsCenter = lazy(() => import('@/components/sections/operations-center').then(m => ({ default: m.OperationsCenter })));
 const BranchesSection = lazy(() => import('@/components/sections/branches-section').then(m => ({ default: m.BranchesSection })));
+const InstallmentsSection = lazy(() => import('@/components/sections/installments-section').then(m => ({ default: m.InstallmentsSection })));
 
 // ===== Loading fallback component =====
 function SectionLoader() {
@@ -86,6 +96,7 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'timetable', label: 'الجدول الأسبوعي', icon: Calendar, roles: ['director', 'employee'] },
   { id: 'timesheet', label: 'حضور الموظفين', icon: Clock, roles: ['director', 'employee'] },
   { id: 'finance', label: 'القسم المالي', icon: Wallet, roles: ['director', 'employee'] },
+  { id: 'installments', label: 'الأقساط المالية', icon: Receipt, roles: ['director', 'employee'] },
   { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['director', 'employee'] },
   { id: 'exams', label: 'التقييمات', icon: ClipboardList, roles: ['director', 'employee'] },
   { id: 'crm', label: 'العملاء المحتملون', icon: UserPlus, roles: ['director', 'employee'] },
@@ -510,6 +521,9 @@ export default function Home() {
           )}
           {activeSection === 'finance' && (
             <Suspense fallback={<SectionLoader />}><FinanceSection user={user} /></Suspense>
+          )}
+                    {activeSection === 'installments' && (
+            <Suspense fallback={<SectionLoader />}><InstallmentsSection isDirector={user.role === 'director'} /></Suspense>
           )}
           {activeSection === 'timetable' && (
             <Suspense fallback={<SectionLoader />}><TimetableSection isDirector={user.role === 'director'} canManageTimetable={user.role === 'director' || user.canManageTimetable} /></Suspense>
