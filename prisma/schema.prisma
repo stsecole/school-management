@@ -8,7 +8,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
- 
 }
 
 // ===== المستخدمون والمصادقة =====
@@ -205,6 +204,8 @@ model Student {
   payments        StudentPayment[]
   registrations   Registration[]
   installments    InstallmentPlan[]
+  InstallmentV2     Installment[]
+  PaymentV2         Payment[]
   grades          Grade[]
   documents       Document[]
 
@@ -223,14 +224,20 @@ model InstallmentPlan {
   monthNumber     Int      // رقم الشهر (1 إلى 30)
   expectedAmount  Float    // المبلغ المطلوب
   paidAmount      Float    @default(0) // المبلغ المدفوع
+  remainingAmount Float    @default(0) // المبلغ المتبقي
   expectedDate    DateTime // تاريخ الاستحقاق المخطط
   paidDate        DateTime? // تاريخ الدفع الفعلي
-  status          String   @default("pending") // "pending" | "paid" | "partial" | "late"
+  status          String   @default("pending") // "pending" | "due" | "paid" | "partial" | "late" | "rescheduled" | "cancelled"
+  isOverdue       Boolean  @default(false) // هل القسط متأخر
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   payments        StudentPayment[] @relation("PaymentToInstallment")
+
+  @@index([studentId, status])
+  @@index([expectedDate])
+  @@index([status, isOverdue])
 }
 
 // ===== التسجيلات في الدورات =====
@@ -312,28 +319,27 @@ model Task {
 // ===== مدفوعات الطلاب (الأقساط) =====
 model StudentPayment {
   id            String   @id @default(cuid())
-  receiptNumber String   @unique
+  receiptNumber String   @unique // رقم الوصل
   studentId     String
-  amount        Float
-  paymentType   String   @default("installment")
-  paymentLabel  String?
-  paymentDate   DateTime
-  paymentMethod String?
-  installmentId String?
+  amount        Float    // المبلغ المدفوع
+  paymentType   String   @default("installment") // "registration" | "installment" | "full" | "additional" | "refund"
+  paymentLabel  String?  // "تسجيل" | "قسط أول" | "قسط ثاني" | ...
+  paymentDate   DateTime // تاريخ الدفع
+  paymentMethod String?  // "cash" | "transfer" | "cheque" | "card" | "other"
+  installmentId String?  // رابط مع قسط محدد
   notes         String?
   branchId      String?
-  isCancelled   Boolean  @default(false)
-  cancelledAt   DateTime?
-  cancelReason  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   student       Student  @relation(fields: [studentId], references: [id])
   installment   InstallmentPlan? @relation("PaymentToInstallment", fields: [installmentId], references: [id])
   branch        Branch?  @relation(fields: [branchId], references: [id])
 
+  // ===== Database indexes for performance =====
   @@index([paymentDate, branchId])
   @@index([studentId])
   @@index([installmentId])
+  @@index([receiptNumber])
 }
 
 // ===== مدفوعات الأساتذة (الرواتب) =====
@@ -341,19 +347,17 @@ model TeacherPayment {
   id            String   @id @default(cuid())
   receiptNumber String   @unique
   teacherId     String
-  amount        Float
-  month         String
+  amount        Float    // المبلغ المدفوع
+  month         String   // الشهر: "2024-01"
   paymentDate   DateTime
-  paymentType   String   @default("salary")
-  paymentLabel  String?
+  paymentType   String   @default("salary") // "salary" | "bonus" | "advance"
+  paymentLabel  String?  // "راتب" | "منحة" | "سلفة"
   notes         String?
-  isCancelled   Boolean  @default(false)
-  cancelledAt   DateTime?
-  cancelReason  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   teacher       Teacher  @relation(fields: [teacherId], references: [id])
 
+  // ===== Database indexes for performance =====
   @@index([teacherId])
   @@index([paymentDate])
 }
@@ -796,7 +800,6 @@ model Document {
   @@index([createdAt])
 }
 
-
 // ===== سجل التغييرات (Activity Log) =====
 
 model ActivityLog {
@@ -817,90 +820,83 @@ model ActivityLog {
   @@index([action])
   @@index([module])
   @@index([createdAt])
-  }
-  
-model StaffPayment {
-  id String @id @default(cuid())
-  staffName String
-  staffRole String?
-  amount Float
-  paymentDate DateTime @default(now())
-  month String?
-  note String?
-  receiptNumber String? @unique
-  isCancelled Boolean @default(false)
-  cancelledAt DateTime?
-  cancelReason String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
 
-  @@index([staffName])
+// ============================================
+// ===== نظام الأقساط المالي المحترف =====
+// ============================================
+
+// ===== خطط الدفع (Payment Plans) =====
+// نموذج مرن يسمح بتحديد خطة دفع مختلفة لكل تخصص أو تسجيل طالب
+
+// ===== خطط دفع الطلاب (Student Payment Plans) =====
+// ربط الطالب بخطة دفع محددة مع حفظ لقطة من القيم وقت التسجيل
+
+// ===== توزيع المدفوعات (Payment Allocations) =====
+// يتبع كيفية توزيع كل دفعة على الأقساط
+
+// ===== عكس المدفوعات (Payment Reversals) =====
+// سجل تدقيق لعمليات عكس الدفعات (لا تُحذف الدفعات، بل تُعكس)
+
+// ============================================
+// ===== نظام الأقساط المالية V2 =====
+// ============================================
+
+// ===== خطط الدفع =====
+model PaymentPlan {
+  id              String   @id @default(cuid())
+  name            String   // اسم خطة الدفع
+  description     String?
+  totalAmount     Float    // المبلغ الإجمالي
+  monthsCount     Int      // عدد الأشهر
+  monthlyAmount   Float    // القسط الشهري (محسوب تلقائياً)
+  startDate       DateTime // تاريخ بداية الأقساط
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  installments    Installment[]
+
+  @@index([active])
+}
+
+// ===== الأقساط =====
+model Installment {
+  id              String   @id @default(cuid())
+  paymentPlanId   String   // رابط مع خطة الدفع
+  studentId       String   // رابط مع الطالب
+  amount          Float    // مبلغ القسط
+  installmentNumber Int     // رقم القسط (1, 2, 3...)
+  dueDate         DateTime  // تاريخ الاستحقاق
+  status          String   @default("PENDING") // PENDING | DUE | OVERDUE | PAID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  paymentPlan     PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  student         Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payment         Payment?
+
+  @@index([paymentPlanId])
+  @@index([studentId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ===== الدفعات =====
+model Payment {
+  id              String   @id @default(cuid())
+  installmentId   String   @unique // رابط مع قسط واحد (unique)
+  studentId       String   // رابط مع الطالب
+  amountPaid      Float    // المبلغ المدفوع
+  paymentDate     DateTime // تاريخ الدفع
+  paymentMethod   String   @default("cash") // cash | transfer | cheque | card
+  receiptNumber   String   // رقم الوصل
+  createdAt       DateTime @default(now())
+
+  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  student         Student     @relation(fields: [studentId], references: [id])
+
+  @@index([studentId])
+  @@index([receiptNumber])
   @@index([paymentDate])
-  @@index([month])
-  @@index([isCancelled])
-
-}
-// أضف هذه النماذج في نهاية ملف prisma/schema.prisma
-
-// ===== اعدادات النسخ الاحتياطي (Backup Settings) =====
-
-model BackupSettings {
-  id                      String   @id @default(cuid())
-  autoBackupEnabled       Boolean  @default(true)
-  frequency               String   @default("daily")
-  scheduledTime           String   @default("02:00")
-  maxBackups              Int      @default(30)
-  lastAutoBackupAt        DateTime?
-  lastManualBackupAt      DateTime?
-  lastRestoreAt           DateTime?
-  notifyOnAutoBackup      Boolean  @default(false)
-  notifyOnBackupFailure   Boolean  @default(true)
-  backupLocation          String   @default("download/backups")
-  compressBackups         Boolean  @default(false)
-  includeUploads          Boolean  @default(false)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-}
-
-// ===== سجل النسخ الاحتياطي (Backup Log) =====
-
-model BackupLog {
-  id          String   @id @default(cuid())
-  type        String
-  filename    String
-  size        Int
-  status      String   @default("success")
-  errorMessage String?
-  userId      String?
-  userName    String?
-  createdAt   DateTime @default(now())
-
-  @@index([type])
-  @@index([status])
-  @@index([createdAt])
-}
-
-// ===== طلبات العمل (Job Applications) =====
-
-model JobApplication {
-  id            String   @id @default(cuid())
-  firstName     String
-  lastName      String
-  birthDate     DateTime?
-  phone         String?
-  email         String?
-  address       String?
-  diploma       String?
-  experience    String?
-  schedule      String   @default("full-time")
-  cvUrl         String?
-  diplomaUrl    String?
-  status        String   @default("pending")
-  note          String?
-  appliedAt     DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([status])
-  @@index([appliedAt])
 }
