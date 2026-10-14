@@ -12,9 +12,6 @@ import {
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
   Loader2, Search, X, Award, Receipt,
 } from 'lucide-react';
-// فقط أضف Receipt إلى القائمة:
-  Loader2, Search, X, Award, Receipt,
-} from 'lucide-react';
 import { LoginScreen } from '@/components/login-screen';
 import { DashboardStats } from '@/components/sections/dashboard-stats';
 import { PWAInstall } from '@/components/pwa-install';
