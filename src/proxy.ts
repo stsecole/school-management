@@ -1,46 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Proxy (Next.js 16 replaces middleware with proxy)
+ * Proxy (Next.js 16 replacement for middleware)
  *
- * يقوم بأمرين:
- * 1. تمرير كل الطلبات (لا يقرأ body، لا يستخدم DB)
- * 2. تفعيل النسخ الاحتياطي التلقائي عند زيارة الصفحات (كل 5 دقائق)
+ * CRITICAL: This proxy MUST NOT read the request body and MUST NOT do any
+ * database queries. Both actions can break the request:
+ *  - Reading the body consumes it, so the route handler receives an empty body
+ *  - Database queries in proxy can exhaust connections in dev mode
+ *
+ * Activity logging is now handled inside each route handler (via logActivity
+ * from @/lib/activity-logger) instead of here.
+ *
+ * This proxy:
+ *  1) Passes all requests through unchanged
+ *  2) Triggers auto-backup (asynchronously, non-blocking) every 5 minutes
+ *     for non-API page requests
  */
 
-// ذاكرة مؤقتة لتجنب التحقق المتكرر
+// ذاكرة مؤقتة لتجنب التحقق المتكرر من النسخ التلقائي
 let lastBackupCheckTime = 0;
-const BACKUP_CHECK_INTERVAL = 5 * 60 * 1000; // 5 دقائق
+const BACKUP_CHECK_INTERVAL = 5 * 60 * 1000; // 5 دقائق بين كل تحقق
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // تفعيل النسخ التلقائي فقط لطلبات الصفحات (وليس API أو ملفات ثابتة)
-  if (
-    !path.startsWith('/api/') &&
-    !path.startsWith('/_next/') &&
-    !path.startsWith('/static/') &&
-    !path.startsWith('/scan')
-  ) {
-    const now = Date.now();
+  // فقط لطلبات الصفحات (وليس API أو ملفات ثابتة)
+  if (!path.startsWith('/api/') && !path.startsWith('/_next/') && !path.startsWith('/static/')) {
     // تحقق كل 5 دقائق فقط (للأداء)
-    if (now - lastBackupCheckTime > BACKUP_CHECK_INTERVAL) {
+    const now = Date.now();
+    if (now - lastBackupCheckTime >= BACKUP_CHECK_INTERVAL) {
       lastBackupCheckTime = now;
 
       // استدعاء API النسخ التلقائي بشكل غير متزامن (لا ينتظر النتيجة)
       try {
-        const origin = request.nextUrl.origin;
-        // استخدام keepalive لضمان إتمام الطلب حتى لو انتهت الاستجابة
-        fetch(`${origin}/api/backup/auto`, {
+        const baseUrl = request.nextUrl.origin;
+        fetch(`${baseUrl}/api/backup/auto`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          keepalive: true,
         }).catch(() => {
           // تجاهل الأخطاء بصمت
         });
-      } catch {
-        // تجاهل الأخطاء
-      }
+      } catch {}
     }
   }
 
@@ -48,6 +48,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // مطابقة كل المسارات ما عدا الملفات الثابتة
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|scan).*)'],
+  // Match all routes except static files
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|scan).*)'],
 };
