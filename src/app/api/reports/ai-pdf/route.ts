@@ -376,7 +376,10 @@ export async function POST(request: NextRequest) {
     // استخدام Playwright لتحويل HTML إلى PDF
     let playwright: any;
     try {
-      playwright = await import('playwright');
+      // Use webpackIgnore + variable indirection to bypass static module resolution
+      // (Playwright is an optional heavy dependency; if missing, the route returns 503)
+      const moduleName = 'playwright';
+      playwright = await (Function('m', `return import(m)`) as (m: string) => Promise<any>)(moduleName);
     } catch (e: any) {
       console.error('Playwright not available:', e?.message || e);
       return NextResponse.json(
