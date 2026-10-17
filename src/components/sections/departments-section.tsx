@@ -7,22 +7,31 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, BookOpen } from 'lucide-react';
+import { Plus, Edit, Trash2, BookOpen, Users, GraduationCap, Layers, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-interface Specialization { id: string; name: string; departmentId: string; }
+interface Specialization {
+  id: string;
+  name: string;
+  departmentId: string;
+}
+
 interface Department {
-  id: string; name: string; code: string | null; description: string | null;
-  isFixed: boolean; hasInstallments: boolean; installmentMonths: number | null;
+  id: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  isFixed: boolean;
+  hasInstallments: boolean;
+  installmentMonths: number | null;
   defaultMonthlyAmount: number | null;
   _count?: { students: number; teachers: number; courses: number; specializations: number };
   specializations?: Specialization[];
 }
 
-export function DepartmentsSection({ canCreate = false, canEdit = false, canDelete = false }: {
-  canCreate?: boolean; canEdit?: boolean; canDelete?: boolean;
-}) {
+export function DepartmentsSection({ isDirector = true }: { isDirector?: boolean }) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -31,6 +40,9 @@ export function DepartmentsSection({ canCreate = false, canEdit = false, canDele
     name: '', code: '', description: '',
     hasInstallments: false, installmentMonths: '', defaultMonthlyAmount: '',
   });
+  const [specDialogOpen, setSpecDialogOpen] = useState(false);
+  const [editingSpec, setEditingSpec] = useState<Specialization | null>(null);
+  const [specFormData, setSpecFormData] = useState<any>({ name: '', departmentId: '' });
   const { toast } = useToast();
 
   const load = async () => {
@@ -49,145 +61,275 @@ export function DepartmentsSection({ canCreate = false, canEdit = false, canDele
     setDialogOpen(true);
   };
 
-  const handleOpenEdit = (dept: Department) => {
-    setEditing(dept);
+  const handleOpenEdit = (d: Department) => {
+    setEditing(d);
     setFormData({
-      name: dept.name, code: dept.code || '', description: dept.description || '',
-      hasInstallments: dept.hasInstallments || false,
-      installmentMonths: dept.installmentMonths || '',
-      defaultMonthlyAmount: dept.defaultMonthlyAmount || '',
+      name: d.name, code: d.code || '', description: d.description || '',
+      hasInstallments: d.hasInstallments,
+      installmentMonths: d.installmentMonths ? String(d.installmentMonths) : '',
+      defaultMonthlyAmount: d.defaultMonthlyAmount ? String(d.defaultMonthlyAmount) : '',
     });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast({ title: 'تنبيه', description: 'اسم القسم مطلوب', variant: 'destructive' });
+      return;
+    }
     const url = editing ? `/api/departments/${editing.id}` : '/api/departments';
     const method = editing ? 'PUT' : 'POST';
     const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...formData,
-        installmentMonths: formData.installmentMonths ? parseInt(formData.installmentMonths) : null,
-        defaultMonthlyAmount: formData.defaultMonthlyAmount ? parseFloat(formData.defaultMonthlyAmount) : null,
-      }),
+      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
     });
+    const data = await res.json();
     if (res.ok) {
       toast({ title: 'تم', description: editing ? 'تم التحديث' : 'تمت الإضافة' });
       setDialogOpen(false);
       load();
     } else {
-      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
+      toast({ title: 'خطأ', description: data.error || 'فشل الحفظ', variant: 'destructive' });
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`حذف القسم "${name}"؟`)) return;
-    const res = await fetch(`/api/departments/${id}`, { method: 'DELETE' });
+  const handleDelete = async (d: Department) => {
+    if (!confirm(`حذف القسم "${d.name}"؟`)) return;
+    const res = await fetch(`/api/departments/${d.id}`, { method: 'DELETE' });
+    const data = await res.json();
     if (res.ok) {
-      toast({ title: 'تم', description: 'تم حذف القسم' });
+      toast({ title: 'تم', description: 'تم الحذف' });
       load();
     } else {
-      toast({ title: 'خطأ', description: 'فشل الحذف', variant: 'destructive' });
+      toast({ title: 'خطأ', description: data.error || 'تعذر الحذف', variant: 'destructive' });
+    }
+  };
+
+  // Specialization handlers
+  const handleOpenAddSpec = (deptId: string) => {
+    setEditingSpec(null);
+    setSpecFormData({ name: '', departmentId: deptId });
+    setSpecDialogOpen(true);
+  };
+
+  const handleOpenEditSpec = (s: Specialization) => {
+    setEditingSpec(s);
+    setSpecFormData({ name: s.name, departmentId: s.departmentId });
+    setSpecDialogOpen(true);
+  };
+
+  const handleSaveSpec = async () => {
+    if (!specFormData.name.trim()) {
+      toast({ title: 'تنبيه', description: 'اسم التخصص مطلوب', variant: 'destructive' });
+      return;
+    }
+    const url = editingSpec ? `/api/specializations/${editingSpec.id}` : '/api/specializations';
+    const method = editingSpec ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(specFormData),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast({ title: 'تم', description: editingSpec ? 'تم التحديث' : 'تمت الإضافة' });
+      setSpecDialogOpen(false);
+      load();
+    } else {
+      toast({ title: 'خطأ', description: data.error || 'فشل الحفظ', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteSpec = async (s: Specialization) => {
+    if (!confirm(`حذف التخصص "${s.name}"؟`)) return;
+    const res = await fetch(`/api/specializations/${s.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      toast({ title: 'تم', description: 'تم الحذف' });
+      load();
+    } else {
+      toast({ title: 'خطأ', description: data.error || 'تعذر الحذف', variant: 'destructive' });
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-primary" /> الأقسام
-        </h2>
-        {canCreate && (
-          <Button onClick={handleOpenAdd}>
-            <Plus className="w-4 h-4 ml-2" /> إضافة قسم
-          </Button>
-        )}
+        <div>
+          <h2 className="text-2xl font-bold">الأقسام والشعب</h2>
+          <p className="text-muted-foreground text-sm">إجمالي: {departments.length} قسم</p>
+        </div>
+        <Button onClick={handleOpenAdd}><Plus className="w-4 h-4 ml-2" /> إضافة قسم</Button>
       </div>
 
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="divide-y">
-            {loading ? (
-              <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
-            ) : departments.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">لا توجد أقسام</div>
-            ) : (
-              departments.map((dept, i) => (
-                <div key={dept.id} className="p-4 hover:bg-muted/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="num">{i + 1}</Badge>
-                      <div>
-                        <p className="font-bold text-lg">{dept.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {dept.code && <span className="ml-2">الكود: {dept.code}</span>}
-                          {dept._count && (
-                            <span className="ml-2">
-                              | الطلاب: {dept._count.students || 0} | الأساتذة: {dept._count.teachers || 0}
-                            </span>
-                          )}
-                          {dept.hasInstallments && (
-                            <Badge variant="secondary" className="ml-2">أقساط ({dept.installmentMonths} أشهر)</Badge>
-                          )}
-                        </p>
-                      </div>
+      {loading ? (
+        <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
+      ) : departments.length === 0 ? (
+        <Card><CardContent className="text-center py-12 text-muted-foreground">لا توجد أقسام</CardContent></Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {departments.map((d) => (
+            <Card key={d.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-primary/10">
+                      <BookOpen className="w-5 h-5 text-primary" />
                     </div>
-                    <div className="flex gap-2">
-                      {canEdit && (
-                        <Button size="sm" variant="ghost" onClick={() => handleOpenEdit(dept)}>
-                          <Edit className="w-4 h-4 text-amber-600" />
-                        </Button>
-                      )}
-                      {canDelete && !dept.isFixed && (
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(dept.id, dept.name)}>
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      )}
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {d.name}
+                        {d.isFixed && <Badge variant="secondary" className="text-[10px]">ثابت</Badge>}
+                        {d.hasInstallments && <Badge variant="outline" className="text-[10px] text-orange-600">{d.installmentMonths} شهر</Badge>}
+                      </CardTitle>
+                      {d.code && <Badge variant="outline" className="text-xs mt-1 num">{d.code}</Badge>}
                     </div>
                   </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => handleOpenEdit(d)}>
+                      <Edit className="w-4 h-4 text-amber-600" />
+                    </Button>
+                    {!d.isFixed && (
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(d)}>
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              </CardHeader>
+              <CardContent>
+                {d.description && <p className="text-sm text-muted-foreground mb-3">{d.description}</p>}
+                <div className="flex items-center gap-4 text-sm mb-3">
+                  <div className="flex items-center gap-1">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span className="num font-medium">{d._count?.students || 0}</span>
+                    <span className="text-muted-foreground">طالب</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                    <span className="num font-medium">{d._count?.teachers || 0}</span>
+                    <span className="text-muted-foreground">أستاذ</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Layers className="w-4 h-4 text-amber-600" />
+                    <span className="num font-medium">{d._count?.specializations || 0}</span>
+                    <span className="text-muted-foreground">تخصص</span>
+                  </div>
+                </div>
 
+                {/* Specializations list */}
+                <div className="border-t pt-3 mt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-muted-foreground">التخصصات (الشعب)</span>
+                    <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => handleOpenAddSpec(d.id)}>
+                      <Plus className="w-3 h-3 ml-1" /> إضافة تخصص
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {d.specializations && d.specializations.length > 0 ? (
+                      d.specializations.map(s => (
+                        <div key={s.id} className="inline-flex items-center gap-1 group">
+                          <Badge variant="outline" className="text-xs">
+                            {s.name}
+                            <button onClick={() => handleOpenEditSpec(s)} className="mr-1 hover:text-amber-600">
+                              <Edit className="w-3 h-3 inline" />
+                            </button>
+                            <button onClick={() => handleDeleteSpec(s)} className="hover:text-red-600">
+                              <Trash2 className="w-3 h-3 inline" />
+                            </button>
+                          </Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">لا توجد تخصصات</span>
+                    )}
+                  </div>
+                </div>
+
+                {d.hasInstallments && d.defaultMonthlyAmount && (
+                  <div className="mt-2 text-xs text-orange-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    القسط الشهري الافتراضي: <span className="num font-medium">{d.defaultMonthlyAmount} دج</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Department dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? 'تعديل قسم' : 'إضافة قسم'}</DialogTitle></DialogHeader>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? 'تعديل القسم' : 'إضافة قسم جديد'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
+            <div className="space-y-2">
               <Label>اسم القسم *</Label>
-              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} disabled={editing?.isFixed} placeholder="مثال: قسم جديد" />
+              {editing?.isFixed && <p className="text-xs text-muted-foreground">لا يمكن تغيير اسم الأقسام الثابتة</p>}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>الكود</Label>
-                <Input value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} />
-              </div>
-              <div>
-                <Label>عدد أشهر الأقساط</Label>
-                <Input type="number" value={formData.installmentMonths} onChange={(e) => setFormData({ ...formData, installmentMonths: e.target.value })} disabled={!formData.hasInstallments} />
-              </div>
+            <div className="space-y-2">
+              <Label>الرمز</Label>
+              <Input value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} placeholder="مثال: TS" dir="ltr" />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>الوصف</Label>
               <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={2} />
             </div>
-            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <input
-                type="checkbox" id="hasInstallments" checked={formData.hasInstallments}
-                onChange={(e) => setFormData({ ...formData, hasInstallments: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <label htmlFor="hasInstallments" className="text-sm font-medium">يدعم نظام الأقساط الشهرية</label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.hasInstallments}
+                  onChange={(e) => setFormData({ ...formData, hasInstallments: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium">قسم بأقساط شهرية (مثل التقني سامي - 30 شهر)</span>
+              </label>
             </div>
+            {formData.hasInstallments && (
+              <div className="grid grid-cols-2 gap-3 p-3 bg-orange-50/50 rounded-lg border border-orange-200">
+                <div className="space-y-2">
+                  <Label>عدد الأشهر</Label>
+                  <Input type="number" value={formData.installmentMonths} onChange={(e) => setFormData({ ...formData, installmentMonths: e.target.value })} placeholder="30" dir="ltr" />
+                </div>
+                <div className="space-y-2">
+                  <Label>القسط الشهري الافتراضي (دج)</Label>
+                  <Input type="number" value={formData.defaultMonthlyAmount} onChange={(e) => setFormData({ ...formData, defaultMonthlyAmount: e.target.value })} placeholder="3000" dir="ltr" />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>حفظ</Button>
+            <Button onClick={handleSave}>{editing ? 'حفظ' : 'إضافة'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Specialization dialog */}
+      <Dialog open={specDialogOpen} onOpenChange={setSpecDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingSpec ? 'تعديل التخصص' : 'إضافة تخصص جديد'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>اسم التخصص *</Label>
+              <Input value={specFormData.name} onChange={(e) => setSpecFormData({ ...specFormData, name: e.target.value })} placeholder="مثال: صيدلة" />
+            </div>
+            <div className="space-y-2">
+              <Label>القسم</Label>
+              <Select value={specFormData.departmentId} onValueChange={(v) => setSpecFormData({ ...specFormData, departmentId: v })}>
+                <SelectTrigger><SelectValue placeholder="اختر القسم" /></SelectTrigger>
+                <SelectContent>
+                  {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSpecDialogOpen(false)}>إلغاء</Button>
+            <Button onClick={handleSaveSpec}>{editingSpec ? 'حفظ' : 'إضافة'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
