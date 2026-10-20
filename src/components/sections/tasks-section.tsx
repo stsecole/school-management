@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Edit, Trash2, Download, CheckCircle2, Clock, AlertCircle, Calendar } from 'lucide-react';
+import {
+  Plus, Search, Edit, Trash2, Download, CheckCircle2, Clock, AlertCircle,
+  Calendar, ListTodo, Sparkles, User,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface Task {
@@ -134,148 +136,321 @@ export function TasksSection() {
   const overdue = tasks.filter(isOverdue).length;
   const completed = tasks.filter(t => t.completed).length;
 
+  const formatDate = (d: string | null) => {
+    if (!d) return '-';
+    const date = new Date(d);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold">متابعة المهام</h2>
-          <p className="text-muted-foreground text-sm">
-            <span className="num font-medium">{tasks.length}</span> مهمة •
-            <span className="num font-medium text-amber-600 mx-1">{pending}</span> معلقة •
-            <span className="num font-medium text-red-600 mx-1">{overdue}</span> متأخرة •
-            <span className="num font-medium text-emerald-600 mx-1">{completed}</span> مكتملة
-          </p>
+      {/* Header - أخضر جذاب */}
+      <div className="bg-gradient-to-r from-emerald-800 to-emerald-700 text-white p-4 rounded-3xl shadow-lg flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-emerald-900/40 flex items-center justify-center">
+            <ListTodo className="w-6 h-6 text-amber-300" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">متابعة المهام</h2>
+            <p className="text-sm text-emerald-100">
+              <span className="num font-medium">{tasks.length}</span> مهمة •
+              <span className="num font-medium text-amber-200 mx-1">{pending}</span> معلقة •
+              <span className="num font-medium text-red-200 mx-1">{overdue}</span> متأخرة •
+              <span className="num font-medium text-emerald-200 mx-1">{completed}</span> مكتملة
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.open('/api/export/tasks', '_blank')}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open('/api/export/tasks', '_blank')}
+            className="bg-emerald-900/40 border-emerald-700 text-white hover:bg-emerald-900/60"
+          >
             <Download className="w-4 h-4 ml-2" /> تصدير
           </Button>
-          <Button onClick={handleOpenAdd}><Plus className="w-4 h-4 ml-2" /> مهمة جديدة</Button>
+          <Button
+            onClick={handleOpenAdd}
+            className="bg-amber-400 hover:bg-amber-500 text-emerald-900 font-bold"
+          >
+            <Plus className="w-4 h-4 ml-2" /> مهمة جديدة
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="بحث..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل الحالات</SelectItem>
-                <SelectItem value="pending">المعلقة</SelectItem>
-                <SelectItem value="completed">المكتملة</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterPriority} onValueChange={setFilterPriority}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل الأولويات</SelectItem>
-                <SelectItem value="high">عالية</SelectItem>
-                <SelectItem value="medium">متوسطة</SelectItem>
-                <SelectItem value="low">منخفضة</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterResponsible} onValueChange={setFilterResponsible}>
-              <SelectTrigger><SelectValue placeholder="كل المسؤولين" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل المسؤولين</SelectItem>
-                {staff.map(s => (
-                  <SelectItem key={s.id} value={s.name}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-emerald-700">الإجمالي</span>
+            <ListTodo className="w-4 h-4 text-emerald-600" />
           </div>
-        </CardContent>
-      </Card>
+          <p className="text-2xl font-bold num text-emerald-900">{tasks.length}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-md border border-amber-100 p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-amber-700">معلقة</span>
+            <Clock className="w-4 h-4 text-amber-600" />
+          </div>
+          <p className="text-2xl font-bold num text-amber-700">{pending}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-md border border-red-100 p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-red-700">متأخرة</span>
+            <AlertCircle className="w-4 h-4 text-red-600" />
+          </div>
+          <p className="text-2xl font-bold num text-red-700">{overdue}</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-emerald-700">مكتملة</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <p className="text-2xl font-bold num text-emerald-700">{completed}</p>
+        </div>
+      </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 text-center">إكتمال</TableHead>
-                  <TableHead>المهام</TableHead>
-                  <TableHead>الأولوية</TableHead>
-                  <TableHead>المسؤول</TableHead>
-                  <TableHead>تاريخ البدأ</TableHead>
-                  <TableHead>الأجال</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead className="text-center">إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">جاري التحميل...</TableCell></TableRow>
-                ) : tasks.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">لا توجد مهام</TableCell></TableRow>
-                ) : tasks.map((t) => (
-                  <TableRow key={t.id} className={`hover:bg-muted/50 ${isOverdue(t) ? 'bg-red-50/40' : ''}`}>
-                    <TableCell className="text-center">
-                      <Checkbox
-                        checked={t.completed}
-                        onCheckedChange={() => handleToggleComplete(t)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className={t.completed ? 'line-through text-muted-foreground' : ''}>{t.title}</div>
-                      {t.notes && <div className="text-xs text-muted-foreground mt-1">{t.notes}</div>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={t.priority === 'high' ? 'destructive' : t.priority === 'medium' ? 'default' : 'secondary'}>
-                        {t.priorityLabel}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{t.responsible || '-'}</TableCell>
-                    <TableCell className="num text-xs">{t.startDate ? new Date(t.startDate).toLocaleDateString('ar') : '-'}</TableCell>
-                    <TableCell className="num text-xs">
-                      {t.deadline ? (
-                        <span className={isOverdue(t) ? 'text-red-600 font-medium' : ''}>
-                          {new Date(t.deadline).toLocaleDateString('ar')}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {t.completed ? (
-                        <Badge variant="default" className="bg-emerald-600"><CheckCircle2 className="w-3 h-3 ml-1" /> مكتملة</Badge>
-                      ) : isOverdue(t) ? (
-                        <Badge variant="destructive"><AlertCircle className="w-3 h-3 ml-1" /> متأخرة</Badge>
-                      ) : (
-                        <Badge variant="secondary"><Clock className="w-3 h-3 ml-1" /> معلقة</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => handleOpenEdit(t)}><Edit className="w-4 h-4 text-amber-600" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => handleDelete(t)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+      {/* Filters - elegant */}
+      <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
+            <Input
+              placeholder="بحث..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pr-10 border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
+            />
           </div>
-        </CardContent>
-      </Card>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="border-emerald-200 focus:border-emerald-500"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="pending">المعلقة</SelectItem>
+              <SelectItem value="completed">المكتملة</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className="border-emerald-200 focus:border-emerald-500"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الأولويات</SelectItem>
+              <SelectItem value="high">عالية</SelectItem>
+              <SelectItem value="medium">متوسطة</SelectItem>
+              <SelectItem value="low">منخفضة</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+            <SelectTrigger className="border-emerald-200 focus:border-emerald-500"><SelectValue placeholder="كل المسؤولين" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل المسؤولين</SelectItem>
+              {staff.map(s => (
+                <SelectItem key={s.id} value={s.name}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Tasks table - elegant green theme with proper column widths */}
+      <div className="bg-white rounded-3xl shadow-lg overflow-hidden border border-emerald-100">
+        <div className="bg-gradient-to-r from-emerald-800 to-emerald-700 text-white p-3 flex items-center gap-2">
+          <ListTodo className="w-5 h-5 text-amber-300" />
+          <h3 className="font-bold">قائمة المهام</h3>
+          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-emerald-900 text-xs font-bold num">
+            {tasks.length}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <Table className="w-full">
+            <TableHeader>
+              <TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100">
+                <TableHead className="w-12 text-center text-emerald-900 font-bold border-l border-emerald-100">✓</TableHead>
+                <TableHead className="min-w-[200px] text-emerald-900 font-bold border-l border-emerald-100">المهمة</TableHead>
+                <TableHead className="w-24 text-emerald-900 font-bold border-l border-emerald-100">الأولوية</TableHead>
+                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">المسؤول</TableHead>
+                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">تاريخ البدء</TableHead>
+                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">الأجل</TableHead>
+                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">الحالة</TableHead>
+                <TableHead className="w-24 text-center text-emerald-900 font-bold">إجراءات</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-emerald-600">
+                    <Clock className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-400" />
+                    جاري التحميل...
+                  </TableCell>
+                </TableRow>
+              ) : tasks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+                      <ListTodo className="w-8 h-8 text-emerald-300" />
+                    </div>
+                    <p className="font-bold text-emerald-900 text-base">لا توجد مهام</p>
+                    <p className="text-xs text-muted-foreground mt-1">أضف مهمة جديدة للبدء</p>
+                  </TableCell>
+                </TableRow>
+              ) : tasks.map((t) => (
+                <TableRow
+                  key={t.id}
+                  className={`hover:bg-emerald-50/30 border-emerald-100 transition ${
+                    isOverdue(t) ? 'bg-red-50/40' : t.completed ? 'bg-emerald-50/30' : ''
+                  }`}
+                >
+                  {/* Completion checkbox */}
+                  <TableCell className="text-center border-l border-emerald-50">
+                    <Checkbox
+                      checked={t.completed}
+                      onCheckedChange={() => handleToggleComplete(t)}
+                    />
+                  </TableCell>
+
+                  {/* Task title */}
+                  <TableCell className="font-medium border-l border-emerald-50">
+                    <div className={t.completed ? 'line-through text-emerald-500' : 'text-emerald-900'}>
+                      {t.title}
+                    </div>
+                    {t.notes && <div className="text-xs text-emerald-600 mt-1">{t.notes}</div>}
+                  </TableCell>
+
+                  {/* Priority */}
+                  <TableCell className="border-l border-emerald-50">
+                    <Badge
+                      variant={t.priority === 'high' ? 'destructive' : t.priority === 'medium' ? 'default' : 'secondary'}
+                      className={
+                        t.priority === 'high' ? 'bg-red-100 text-red-700 border-red-200' :
+                        t.priority === 'medium' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                        'bg-emerald-100 text-emerald-700 border-emerald-200'
+                      }
+                    >
+                      {t.priorityLabel}
+                    </Badge>
+                  </TableCell>
+
+                  {/* Responsible */}
+                  <TableCell className="text-sm text-emerald-800 border-l border-emerald-50">
+                    {t.responsible ? (
+                      <div className="flex items-center gap-1">
+                        <User className="w-3 h-3 text-emerald-500" />
+                        <span>{t.responsible}</span>
+                      </div>
+                    ) : <span className="text-emerald-400">-</span>}
+                  </TableCell>
+
+                  {/* Start date */}
+                  <TableCell className="num text-xs text-emerald-800 border-l border-emerald-50">
+                    {t.startDate ? formatDate(t.startDate) : <span className="text-emerald-400">-</span>}
+                  </TableCell>
+
+                  {/* Deadline */}
+                  <TableCell className="num text-xs border-l border-emerald-50">
+                    {t.deadline ? (
+                      <span className={isOverdue(t) ? 'text-red-600 font-bold' : 'text-emerald-800'}>
+                        {formatDate(t.deadline)}
+                      </span>
+                    ) : <span className="text-emerald-400">-</span>}
+                  </TableCell>
+
+                  {/* Status */}
+                  <TableCell className="border-l border-emerald-50">
+                    {t.completed ? (
+                      <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        <CheckCircle2 className="w-3 h-3 ml-1" /> مكتملة
+                      </Badge>
+                    ) : isOverdue(t) ? (
+                      <Badge className="bg-red-100 text-red-700 border border-red-200">
+                        <AlertCircle className="w-3 h-3 ml-1" /> متأخرة
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-100 text-amber-700 border border-amber-200">
+                        <Clock className="w-3 h-3 ml-1" /> معلقة
+                      </Badge>
+                    )}
+                  </TableCell>
+
+                  {/* Actions */}
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleOpenEdit(t)}
+                        className="h-8 w-8 p-0 hover:bg-amber-50"
+                      >
+                        <Edit className="w-4 h-4 text-amber-600" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(t)}
+                        className="h-8 w-8 p-0 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-3">
+        <h4 className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1">
+          <Sparkles className="w-3.5 h-3.5" /> مفتاح الألوان
+        </h4>
+        <div className="flex flex-wrap gap-4 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-emerald-500" />
+            <span className="text-emerald-800">مكتملة</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-amber-500" />
+            <span className="text-emerald-800">معلقة</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500" />
+            <span className="text-emerald-800">متأخرة</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-blue-500" />
+            <span className="text-emerald-800">أولوية متوسطة</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-700" />
+            <span className="text-emerald-800">أولوية عالية</span>
+          </div>
+        </div>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? 'تعديل المهمة' : 'مهمة جديدة'}</DialogTitle>
+            <DialogTitle className="text-emerald-900 flex items-center gap-2">
+              <ListTodo className="w-5 h-5 text-emerald-700" />
+              {editing ? 'تعديل المهمة' : 'مهمة جديدة'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>المهمة *</Label>
-              <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="مثال: تحضير قوائم الحضور" />
+              <Label className="text-emerald-900 font-bold">المهمة *</Label>
+              <Input
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="مثال: تحضير قوائم الحضور"
+                className="border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>الأولوية</Label>
+                <Label className="text-emerald-900 font-bold">الأولوية</Label>
                 <Select value={formData.priorityLabel} onValueChange={(v) => setFormData({ ...formData, priorityLabel: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="border-emerald-200 focus:border-emerald-500"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="عالي">عالي</SelectItem>
                     <SelectItem value="متوسط">متوسط</SelectItem>
@@ -284,12 +459,12 @@ export function TasksSection() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>المسؤول</Label>
+                <Label className="text-emerald-900 font-bold">المسؤول</Label>
                 <Select
                   value={formData.responsible || 'none'}
                   onValueChange={(v) => setFormData({ ...formData, responsible: v === 'none' ? '' : v })}
                 >
-                  <SelectTrigger><SelectValue placeholder="اختر المسؤول" /></SelectTrigger>
+                  <SelectTrigger className="border-emerald-200 focus:border-emerald-500"><SelectValue placeholder="اختر المسؤول" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">بدون مسؤول</SelectItem>
                     {staff.map(s => (
@@ -299,30 +474,58 @@ export function TasksSection() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>تاريخ البدأ</Label>
-                <Input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} dir="ltr" />
+                <Label className="text-emerald-900 font-bold">تاريخ البدء</Label>
+                <Input
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  dir="ltr"
+                  className="border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
+                />
               </div>
               <div className="space-y-2">
-                <Label>الأجال (الموعد النهائي)</Label>
-                <Input type="date" value={formData.deadline} onChange={(e) => setFormData({ ...formData, deadline: e.target.value })} dir="ltr" />
+                <Label className="text-emerald-900 font-bold">الأجل (الموعد النهائي)</Label>
+                <Input
+                  type="date"
+                  value={formData.deadline}
+                  onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                  dir="ltr"
+                  className="border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
+                />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg">
               <Checkbox
                 id="completed"
                 checked={formData.completed}
                 onCheckedChange={(v) => setFormData({ ...formData, completed: v === true, status: v === true ? 'done' : 'pending', statusValue: v === true ? '1' : '0' })}
               />
-              <Label htmlFor="completed">مكتملة</Label>
+              <Label htmlFor="completed" className="text-emerald-900 font-medium cursor-pointer">مكتملة</Label>
             </div>
             <div className="space-y-2">
-              <Label>ملاحظات</Label>
-              <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={2} />
+              <Label className="text-emerald-900 font-bold">ملاحظات</Label>
+              <Textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={2}
+                className="border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>{editing ? 'حفظ' : 'إضافة'}</Button>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={handleSave}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white"
+            >
+              {editing ? 'حفظ' : 'إضافة'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
