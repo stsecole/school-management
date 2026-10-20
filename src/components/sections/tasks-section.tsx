@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Edit, Trash2, Download, CheckCircle2, Clock, AlertCircle,
@@ -262,62 +261,66 @@ export function TasksSection() {
           </span>
         </div>
         <div className="overflow-x-auto">
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100">
-                <TableHead className="w-12 text-center text-emerald-900 font-bold border-l border-emerald-100">✓</TableHead>
-                <TableHead className="min-w-[200px] text-emerald-900 font-bold border-l border-emerald-100">المهمة</TableHead>
-                <TableHead className="w-24 text-emerald-900 font-bold border-l border-emerald-100">الأولوية</TableHead>
-                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">المسؤول</TableHead>
-                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">تاريخ البدء</TableHead>
-                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">الأجل</TableHead>
-                <TableHead className="w-32 text-emerald-900 font-bold border-l border-emerald-100">الحالة</TableHead>
-                <TableHead className="w-24 text-center text-emerald-900 font-bold">إجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-emerald-600">
-                    <Clock className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-400" />
-                    جاري التحميل...
-                  </TableCell>
-                </TableRow>
-              ) : tasks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-10">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-3">
-                      <ListTodo className="w-8 h-8 text-emerald-300" />
-                    </div>
-                    <p className="font-bold text-emerald-900 text-base">لا توجد مهام</p>
-                    <p className="text-xs text-muted-foreground mt-1">أضف مهمة جديدة للبدء</p>
-                  </TableCell>
-                </TableRow>
-              ) : tasks.map((t) => (
-                <TableRow
+          {/* CSS Grid table - ensures perfect header/body alignment */}
+          <div className="min-w-[900px]">
+            {/* Header row */}
+            <div
+              className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+              style={{ gridTemplateColumns: '40px minmax(200px, 2fr) 100px 140px 110px 110px 130px 90px' }}
+            >
+              <div className="text-center py-2 px-1 border-l border-emerald-200">✓</div>
+              <div className="py-2 px-3 border-l border-emerald-200">المهمة</div>
+              <div className="py-2 px-2 border-l border-emerald-200">الأولوية</div>
+              <div className="py-2 px-2 border-l border-emerald-200">المسؤول</div>
+              <div className="py-2 px-2 border-l border-emerald-200 text-center">تاريخ البدء</div>
+              <div className="py-2 px-2 border-l border-emerald-200 text-center">الأجل</div>
+              <div className="py-2 px-2 border-l border-emerald-200 text-center">الحالة</div>
+              <div className="py-2 px-2 text-center">إجراءات</div>
+            </div>
+
+            {/* Body rows */}
+            {loading ? (
+              <div className="text-center py-8 text-emerald-600">
+                <Clock className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-400" />
+                جاري التحميل...
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="text-center py-10">
+                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-3">
+                  <ListTodo className="w-8 h-8 text-emerald-300" />
+                </div>
+                <p className="font-bold text-emerald-900 text-base">لا توجد مهام</p>
+                <p className="text-xs text-muted-foreground mt-1">أضف مهمة جديدة للبدء</p>
+              </div>
+            ) : (
+              tasks.map((t) => (
+                <div
                   key={t.id}
-                  className={`hover:bg-emerald-50/30 border-emerald-100 transition ${
-                    isOverdue(t) ? 'bg-red-50/40' : t.completed ? 'bg-emerald-50/30' : ''
+                  className={`grid border-b border-emerald-50 transition ${
+                    isOverdue(t) ? 'bg-red-50/40 hover:bg-red-50/60' :
+                    t.completed ? 'bg-emerald-50/30 hover:bg-emerald-50/50' :
+                    'hover:bg-emerald-50/30'
                   }`}
+                  style={{ gridTemplateColumns: '40px minmax(200px, 2fr) 100px 140px 110px 110px 130px 90px' }}
                 >
-                  {/* Completion checkbox */}
-                  <TableCell className="text-center border-l border-emerald-50">
+                  {/* 1) Completion checkbox */}
+                  <div className="flex items-center justify-center px-1 border-l border-emerald-50">
                     <Checkbox
                       checked={t.completed}
                       onCheckedChange={() => handleToggleComplete(t)}
                     />
-                  </TableCell>
+                  </div>
 
-                  {/* Task title */}
-                  <TableCell className="font-medium border-l border-emerald-50">
-                    <div className={t.completed ? 'line-through text-emerald-500' : 'text-emerald-900'}>
+                  {/* 2) Task title */}
+                  <div className="py-2 px-3 border-l border-emerald-50">
+                    <div className={`font-medium ${t.completed ? 'line-through text-emerald-500' : 'text-emerald-900'}`}>
                       {t.title}
                     </div>
                     {t.notes && <div className="text-xs text-emerald-600 mt-1">{t.notes}</div>}
-                  </TableCell>
+                  </div>
 
-                  {/* Priority */}
-                  <TableCell className="border-l border-emerald-50">
+                  {/* 3) Priority */}
+                  <div className="py-2 px-2 border-l border-emerald-50 flex items-center">
                     <Badge
                       variant={t.priority === 'high' ? 'destructive' : t.priority === 'medium' ? 'default' : 'secondary'}
                       className={
@@ -328,74 +331,74 @@ export function TasksSection() {
                     >
                       {t.priorityLabel}
                     </Badge>
-                  </TableCell>
+                  </div>
 
-                  {/* Responsible */}
-                  <TableCell className="text-sm text-emerald-800 border-l border-emerald-50">
+                  {/* 4) Responsible */}
+                  <div className="py-2 px-2 border-l border-emerald-50 flex items-center text-sm text-emerald-800">
                     {t.responsible ? (
                       <div className="flex items-center gap-1">
-                        <User className="w-3 h-3 text-emerald-500" />
-                        <span>{t.responsible}</span>
+                        <User className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                        <span className="truncate">{t.responsible}</span>
                       </div>
                     ) : <span className="text-emerald-400">-</span>}
-                  </TableCell>
+                  </div>
 
-                  {/* Start date */}
-                  <TableCell className="num text-xs text-emerald-800 border-l border-emerald-50">
+                  {/* 5) Start date */}
+                  <div className="py-2 px-2 border-l border-emerald-50 flex items-center justify-center num text-xs text-emerald-800">
                     {t.startDate ? formatDate(t.startDate) : <span className="text-emerald-400">-</span>}
-                  </TableCell>
+                  </div>
 
-                  {/* Deadline */}
-                  <TableCell className="num text-xs border-l border-emerald-50">
+                  {/* 6) Deadline */}
+                  <div className="py-2 px-2 border-l border-emerald-50 flex items-center justify-center num text-xs">
                     {t.deadline ? (
                       <span className={isOverdue(t) ? 'text-red-600 font-bold' : 'text-emerald-800'}>
                         {formatDate(t.deadline)}
                       </span>
                     ) : <span className="text-emerald-400">-</span>}
-                  </TableCell>
+                  </div>
 
-                  {/* Status */}
-                  <TableCell className="border-l border-emerald-50">
+                  {/* 7) Status */}
+                  <div className="py-2 px-2 border-l border-emerald-50 flex items-center justify-center">
                     {t.completed ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">
+                      <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                         <CheckCircle2 className="w-3 h-3 ml-1" /> مكتملة
                       </Badge>
                     ) : isOverdue(t) ? (
-                      <Badge className="bg-red-100 text-red-700 border border-red-200">
+                      <Badge className="bg-red-100 text-red-700 border border-red-200 whitespace-nowrap">
                         <AlertCircle className="w-3 h-3 ml-1" /> متأخرة
                       </Badge>
                     ) : (
-                      <Badge className="bg-amber-100 text-amber-700 border border-amber-200">
+                      <Badge className="bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
                         <Clock className="w-3 h-3 ml-1" /> معلقة
                       </Badge>
                     )}
-                  </TableCell>
+                  </div>
 
-                  {/* Actions */}
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleOpenEdit(t)}
-                        className="h-8 w-8 p-0 hover:bg-amber-50"
-                      >
-                        <Edit className="w-4 h-4 text-amber-600" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDelete(t)}
-                        className="h-8 w-8 p-0 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  {/* 8) Actions */}
+                  <div className="py-2 px-2 flex items-center justify-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleOpenEdit(t)}
+                      className="h-8 w-8 p-0 hover:bg-amber-50"
+                      title="تعديل"
+                    >
+                      <Edit className="w-4 h-4 text-amber-600" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDelete(t)}
+                      className="h-8 w-8 p-0 hover:bg-red-50"
+                      title="حذف"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
