@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -2278,28 +2277,39 @@ function RoomsManagement({ isDirector }: { isDirector: boolean }) {
         </Button>}
       </div>
       <div className="p-2">
-        <Table>
-          <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100">
-            <TableHead className="text-emerald-900 font-bold">الاسم</TableHead><TableHead className="text-emerald-900 font-bold">الكود</TableHead><TableHead className="text-emerald-900 font-bold">النوع</TableHead><TableHead className="text-emerald-900 font-bold">السعة</TableHead>
-            <TableHead className="text-center text-emerald-900 font-bold">إجراءات</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {rooms.map(r => (
-              <TableRow key={r.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                <TableCell className="font-bold text-emerald-900">{r.name}</TableCell>
-                <TableCell className="num text-emerald-700">{r.code || '-'}</TableCell>
-                <TableCell><Badge variant="outline" className="border-emerald-200 text-emerald-700">{ROOM_TYPES.find(rt => rt.value === r.type)?.label || r.type}</Badge></TableCell>
-                <TableCell className="num font-bold text-emerald-900">{r.capacity}</TableCell>
-                <TableCell className="text-center">
-                  {isDirector && <>
-                    <Button size="sm" variant="ghost" onClick={() => { setEditing(r); setFormData({ name: r.name, code: r.code || '', capacity: String(r.capacity), type: r.type, building: r.building || '', floor: r.floor || '', notes: r.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(r)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                  </>}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="min-w-[800px] overflow-x-auto">
+          {/* Header row */}
+          <div
+            className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+            style={{ gridTemplateColumns: '2fr 100px 1fr 80px 100px' }}
+          >
+            <div className="py-2 px-3 border-l border-emerald-200">الاسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">الكود</div>
+            <div className="py-2 px-3 border-l border-emerald-200">النوع</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">السعة</div>
+            <div className="py-2 px-2 text-center">إجراءات</div>
+          </div>
+
+          {/* Body rows */}
+          {rooms.map(r => (
+            <div
+              key={r.id}
+              className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+              style={{ gridTemplateColumns: '2fr 100px 1fr 80px 100px' }}
+            >
+              <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{r.name}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{r.code || '-'}</div>
+              <div className="py-2 px-3 border-l border-emerald-50"><Badge variant="outline" className="border-emerald-200 text-emerald-700">{ROOM_TYPES.find(rt => rt.value === r.type)?.label || r.type}</Badge></div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num font-bold text-emerald-900">{r.capacity}</div>
+              <div className="py-2 px-2 flex items-center justify-center gap-1">
+                {isDirector && <>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-amber-50" onClick={() => { setEditing(r); setFormData({ name: r.name, code: r.code || '', capacity: String(r.capacity), type: r.type, building: r.building || '', floor: r.floor || '', notes: r.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => handleDelete(r)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                </>}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2367,28 +2377,39 @@ function GroupsManagement({ isDirector }: { isDirector: boolean }) {
         </Button>}
       </div>
       <div className="p-2">
-        <Table>
-          <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100">
-            <TableHead className="text-emerald-900 font-bold">الاسم</TableHead><TableHead className="text-emerald-900 font-bold">القسم</TableHead><TableHead className="text-emerald-900 font-bold">التخصص</TableHead><TableHead className="text-emerald-900 font-bold">العدد</TableHead>
-            <TableHead className="text-center text-emerald-900 font-bold">إجراءات</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {groups.map(g => (
-              <TableRow key={g.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                <TableCell className="font-bold text-emerald-900">{g.name}</TableCell>
-                <TableCell className="text-emerald-700">{g.department?.name || '-'}</TableCell>
-                <TableCell className="text-emerald-700">{g.specialization?.name || '-'}</TableCell>
-                <TableCell className="num font-bold text-emerald-900">{g.studentCount}</TableCell>
-                <TableCell className="text-center">
-                  {isDirector && <>
-                    <Button size="sm" variant="ghost" onClick={() => { setEditing(g); setFormData({ name: g.name, code: g.code || '', departmentId: g.departmentId || '', specializationId: g.specializationId || '', level: g.level || '', studentCount: String(g.studentCount), notes: g.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(g)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                  </>}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="min-w-[800px] overflow-x-auto">
+          {/* Header row */}
+          <div
+            className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+            style={{ gridTemplateColumns: '2fr 1fr 1fr 80px 100px' }}
+          >
+            <div className="py-2 px-3 border-l border-emerald-200">الاسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200">القسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200">التخصص</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">العدد</div>
+            <div className="py-2 px-2 text-center">إجراءات</div>
+          </div>
+
+          {/* Body rows */}
+          {groups.map(g => (
+            <div
+              key={g.id}
+              className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+              style={{ gridTemplateColumns: '2fr 1fr 1fr 80px 100px' }}
+            >
+              <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{g.name}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-emerald-700">{g.department?.name || '-'}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-emerald-700">{g.specialization?.name || '-'}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num font-bold text-emerald-900">{g.studentCount}</div>
+              <div className="py-2 px-2 flex items-center justify-center gap-1">
+                {isDirector && <>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-amber-50" onClick={() => { setEditing(g); setFormData({ name: g.name, code: g.code || '', departmentId: g.departmentId || '', specializationId: g.specializationId || '', level: g.level || '', studentCount: String(g.studentCount), notes: g.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => handleDelete(g)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                </>}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2458,32 +2479,44 @@ function SubjectsManagement({ isDirector }: { isDirector: boolean }) {
         </Button>}
       </div>
       <div className="p-2">
-        <Table>
-          <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100">
-            <TableHead className="text-emerald-900 font-bold">المادة</TableHead><TableHead className="text-emerald-900 font-bold">القسم</TableHead><TableHead className="text-emerald-900 font-bold">ساعات/أسبوع</TableHead><TableHead className="text-emerald-900 font-bold">الأستاذ</TableHead><TableHead className="text-emerald-900 font-bold">النوع المطلوب</TableHead>
-            <TableHead className="text-center text-emerald-900 font-bold">إجراءات</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {subjects.map(s => (
-              <TableRow key={s.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                <TableCell className="font-bold text-emerald-900">
-                  <span className="inline-block w-3 h-3 rounded-full ml-2" style={{ backgroundColor: s.color || '#3b82f6' }}></span>
-                  {s.name}
-                </TableCell>
-                <TableCell className="text-emerald-700">{s.department?.name || '-'}</TableCell>
-                <TableCell className="num font-bold text-emerald-900">{s.weeklyHours}</TableCell>
-                <TableCell className="text-emerald-700">{s.teacher?.name || '-'}</TableCell>
-                <TableCell>{s.requiredRoomType ? <Badge variant="outline" className="border-emerald-200 text-emerald-700">{ROOM_TYPES.find(rt => rt.value === s.requiredRoomType)?.label || s.requiredRoomType}</Badge> : '-'}</TableCell>
-                <TableCell className="text-center">
-                  {isDirector && <>
-                    <Button size="sm" variant="ghost" onClick={() => { setEditing(s); setFormData({ name: s.name, code: s.code || '', departmentId: s.departmentId || '', specializationId: s.specializationId || '', weeklyHours: String(s.weeklyHours), requiredRoomType: s.requiredRoomType || '', color: s.color || '#3b82f6', teacherId: s.teacherId || '', notes: s.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => handleDelete(s)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                  </>}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="min-w-[800px] overflow-x-auto">
+          {/* Header row */}
+          <div
+            className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+            style={{ gridTemplateColumns: '2fr 1fr 100px 1fr 1fr 100px' }}
+          >
+            <div className="py-2 px-3 border-l border-emerald-200">المادة</div>
+            <div className="py-2 px-3 border-l border-emerald-200">القسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">ساعات/أسبوع</div>
+            <div className="py-2 px-3 border-l border-emerald-200">الأستاذ</div>
+            <div className="py-2 px-3 border-l border-emerald-200">النوع المطلوب</div>
+            <div className="py-2 px-2 text-center">إجراءات</div>
+          </div>
+
+          {/* Body rows */}
+          {subjects.map(s => (
+            <div
+              key={s.id}
+              className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+              style={{ gridTemplateColumns: '2fr 1fr 100px 1fr 1fr 100px' }}
+            >
+              <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900 flex items-center">
+                <span className="inline-block w-3 h-3 rounded-full ml-2" style={{ backgroundColor: s.color || '#3b82f6' }}></span>
+                {s.name}
+              </div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-emerald-700">{s.department?.name || '-'}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num font-bold text-emerald-900">{s.weeklyHours}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-emerald-700">{s.teacher?.name || '-'}</div>
+              <div className="py-2 px-3 border-l border-emerald-50">{s.requiredRoomType ? <Badge variant="outline" className="border-emerald-200 text-emerald-700">{ROOM_TYPES.find(rt => rt.value === s.requiredRoomType)?.label || s.requiredRoomType}</Badge> : '-'}</div>
+              <div className="py-2 px-2 flex items-center justify-center gap-1">
+                {isDirector && <>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-amber-50" onClick={() => { setEditing(s); setFormData({ name: s.name, code: s.code || '', departmentId: s.departmentId || '', specializationId: s.specializationId || '', weeklyHours: String(s.weeklyHours), requiredRoomType: s.requiredRoomType || '', color: s.color || '#3b82f6', teacherId: s.teacherId || '', notes: s.notes || '' }); setDialogOpen(true); }}><Edit className="w-4 h-4 text-amber-600" /></Button>
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => handleDelete(s)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                </>}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2542,20 +2575,36 @@ function TimeSlotsManagement({ isDirector }: { isDirector: boolean }) {
         {isDirector && <Button size="sm" className="bg-amber-400 hover:bg-amber-500 text-emerald-900" onClick={() => setDialogOpen(true)}><Plus className="w-4 h-4 ml-1" /> إضافة</Button>}
       </div>
       <div className="p-2">
-        <Table>
-          <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100"><TableHead className="text-emerald-900 font-bold">الاسم</TableHead><TableHead className="text-emerald-900 font-bold">اليوم</TableHead><TableHead className="text-emerald-900 font-bold">من</TableHead><TableHead className="text-emerald-900 font-bold">إلى</TableHead><TableHead className="text-center text-emerald-900 font-bold">إجراء</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {timeSlots.map(t => (
-              <TableRow key={t.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                <TableCell className="font-bold text-emerald-900">{t.name}</TableCell>
-                <TableCell className="text-emerald-700">{DAYS[t.dayOfWeek]}</TableCell>
-                <TableCell className="num font-bold text-emerald-900">{t.startTime}</TableCell>
-                <TableCell className="num font-bold text-emerald-900">{t.endTime}</TableCell>
-                <TableCell className="text-center">{isDirector && <Button size="sm" variant="ghost" onClick={() => handleDelete(t)}><Trash2 className="w-4 h-4 text-red-600" /></Button>}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="min-w-[800px] overflow-x-auto">
+          {/* Header row */}
+          <div
+            className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+            style={{ gridTemplateColumns: '2fr 100px 80px 80px 80px' }}
+          >
+            <div className="py-2 px-3 border-l border-emerald-200">الاسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">اليوم</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">من</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">إلى</div>
+            <div className="py-2 px-2 text-center">إجراء</div>
+          </div>
+
+          {/* Body rows */}
+          {timeSlots.map(t => (
+            <div
+              key={t.id}
+              className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+              style={{ gridTemplateColumns: '2fr 100px 80px 80px 80px' }}
+            >
+              <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{t.name}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center text-emerald-700">{DAYS[t.dayOfWeek]}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num font-bold text-emerald-900">{t.startTime}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num font-bold text-emerald-900">{t.endTime}</div>
+              <div className="py-2 px-2 flex items-center justify-center gap-1">
+                {isDirector && <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => handleDelete(t)}><Trash2 className="w-4 h-4 text-red-600" /></Button>}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2610,20 +2659,36 @@ function HolidaysManagement({ isDirector }: { isDirector: boolean }) {
         {isDirector && <Button size="sm" className="bg-amber-400 hover:bg-amber-500 text-emerald-900" onClick={() => setDialogOpen(true)}><Plus className="w-4 h-4 ml-1" /> إضافة</Button>}
       </div>
       <div className="p-2">
-        <Table>
-          <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100"><TableHead className="text-emerald-900 font-bold">الاسم</TableHead><TableHead className="text-emerald-900 font-bold">من</TableHead><TableHead className="text-emerald-900 font-bold">إلى</TableHead><TableHead className="text-emerald-900 font-bold">النوع</TableHead><TableHead className="text-center text-emerald-900 font-bold">إجراء</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {holidays.map(h => (
-              <TableRow key={h.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                <TableCell className="font-bold text-emerald-900">{h.name}</TableCell>
-                <TableCell className="num text-emerald-700">{new Date(h.startDate).toLocaleDateString('ar')}</TableCell>
-                <TableCell className="num text-emerald-700">{new Date(h.endDate).toLocaleDateString('ar')}</TableCell>
-                <TableCell><Badge variant="outline" className="border-emerald-200 text-emerald-700">{h.type === 'holiday' ? 'عطلة' : h.type === 'exam' ? 'امتحان' : 'حدث'}</Badge></TableCell>
-                <TableCell className="text-center">{isDirector && <Button size="sm" variant="ghost" onClick={() => handleDelete(h)}><Trash2 className="w-4 h-4 text-red-600" /></Button>}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="min-w-[800px] overflow-x-auto">
+          {/* Header row */}
+          <div
+            className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+            style={{ gridTemplateColumns: '2fr 120px 120px 1fr 80px' }}
+          >
+            <div className="py-2 px-3 border-l border-emerald-200">الاسم</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">من</div>
+            <div className="py-2 px-3 border-l border-emerald-200 text-center">إلى</div>
+            <div className="py-2 px-3 border-l border-emerald-200">النوع</div>
+            <div className="py-2 px-2 text-center">إجراء</div>
+          </div>
+
+          {/* Body rows */}
+          {holidays.map(h => (
+            <div
+              key={h.id}
+              className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+              style={{ gridTemplateColumns: '2fr 120px 120px 1fr 80px' }}
+            >
+              <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{h.name}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{new Date(h.startDate).toLocaleDateString('ar')}</div>
+              <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{new Date(h.endDate).toLocaleDateString('ar')}</div>
+              <div className="py-2 px-3 border-l border-emerald-50"><Badge variant="outline" className="border-emerald-200 text-emerald-700">{h.type === 'holiday' ? 'عطلة' : h.type === 'exam' ? 'امتحان' : 'حدث'}</Badge></div>
+              <div className="py-2 px-2 flex items-center justify-center gap-1">
+                {isDirector && <Button size="sm" variant="ghost" className="h-8 w-8 p-0 hover:bg-red-50" onClick={() => handleDelete(h)}><Trash2 className="w-4 h-4 text-red-600" /></Button>}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -2873,21 +2938,34 @@ function StatsView() {
             <h3 className="font-bold">ساعات الأساتذة</h3>
           </div>
           <div className="p-2">
-            <Table>
-              <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100"><TableHead className="text-emerald-900 font-bold">الأستاذ</TableHead><TableHead className="text-center text-emerald-900 font-bold">حصص</TableHead><TableHead className="text-center text-emerald-900 font-bold">ساعات</TableHead><TableHead className="text-center text-emerald-900 font-bold">استغلال</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {stats.teacherUtilization?.map((t: any) => (
-                  <TableRow key={t.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                    <TableCell className="font-bold text-emerald-900">{t.name}</TableCell>
-                    <TableCell className="text-center num text-emerald-700">{t.sessions}</TableCell>
-                    <TableCell className="text-center num text-emerald-700">{Math.round(t.hours * 10) / 10}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={t.utilizationRate > 80 ? 'destructive' : t.utilizationRate > 50 ? 'default' : 'secondary'} className="num">{t.utilizationRate}%</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="min-w-[600px] overflow-x-auto">
+              {/* Header row */}
+              <div
+                className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+                style={{ gridTemplateColumns: '2fr 100px 100px 120px' }}
+              >
+                <div className="py-2 px-3 border-l border-emerald-200">الأستاذ</div>
+                <div className="py-2 px-3 border-l border-emerald-200 text-center">حصص</div>
+                <div className="py-2 px-3 border-l border-emerald-200 text-center">ساعات</div>
+                <div className="py-2 px-2 text-center">استغلال</div>
+              </div>
+
+              {/* Body rows */}
+              {stats.teacherUtilization?.map((t: any) => (
+                <div
+                  key={t.id}
+                  className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+                  style={{ gridTemplateColumns: '2fr 100px 100px 120px' }}
+                >
+                  <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{t.name}</div>
+                  <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{t.sessions}</div>
+                  <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{Math.round(t.hours * 10) / 10}</div>
+                  <div className="py-2 px-2 flex items-center justify-center">
+                    <Badge variant={t.utilizationRate > 80 ? 'destructive' : t.utilizationRate > 50 ? 'default' : 'secondary'} className="num">{t.utilizationRate}%</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -2897,21 +2975,34 @@ function StatsView() {
             <h3 className="font-bold">استغلال القاعات</h3>
           </div>
           <div className="p-2">
-            <Table>
-              <TableHeader><TableRow className="bg-emerald-50 hover:bg-emerald-50 border-emerald-100"><TableHead className="text-emerald-900 font-bold">القاعة</TableHead><TableHead className="text-center text-emerald-900 font-bold">حصص</TableHead><TableHead className="text-center text-emerald-900 font-bold">ساعات</TableHead><TableHead className="text-center text-emerald-900 font-bold">استغلال</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {stats.roomUtilization?.map((r: any) => (
-                  <TableRow key={r.id} className="hover:bg-emerald-50/30 border-emerald-100">
-                    <TableCell className="font-bold text-emerald-900">{r.name}</TableCell>
-                    <TableCell className="text-center num text-emerald-700">{r.sessions}</TableCell>
-                    <TableCell className="text-center num text-emerald-700">{Math.round(r.hours * 10) / 10}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={r.utilizationRate > 80 ? 'destructive' : r.utilizationRate > 50 ? 'default' : 'secondary'} className="num">{r.utilizationRate}%</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="min-w-[600px] overflow-x-auto">
+              {/* Header row */}
+              <div
+                className="grid bg-emerald-50 border-b border-emerald-200 font-bold text-emerald-900 text-sm"
+                style={{ gridTemplateColumns: '2fr 100px 100px 120px' }}
+              >
+                <div className="py-2 px-3 border-l border-emerald-200">القاعة</div>
+                <div className="py-2 px-3 border-l border-emerald-200 text-center">حصص</div>
+                <div className="py-2 px-3 border-l border-emerald-200 text-center">ساعات</div>
+                <div className="py-2 px-2 text-center">استغلال</div>
+              </div>
+
+              {/* Body rows */}
+              {stats.roomUtilization?.map((r: any) => (
+                <div
+                  key={r.id}
+                  className="grid border-b border-emerald-50 hover:bg-emerald-50/30 transition"
+                  style={{ gridTemplateColumns: '2fr 100px 100px 120px' }}
+                >
+                  <div className="py-2 px-3 border-l border-emerald-50 font-bold text-emerald-900">{r.name}</div>
+                  <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{r.sessions}</div>
+                  <div className="py-2 px-3 border-l border-emerald-50 text-center num text-emerald-700">{Math.round(r.hours * 10) / 10}</div>
+                  <div className="py-2 px-2 flex items-center justify-center">
+                    <Badge variant={r.utilizationRate > 80 ? 'destructive' : r.utilizationRate > 50 ? 'default' : 'secondary'} className="num">{r.utilizationRate}%</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
