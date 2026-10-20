@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -329,6 +329,17 @@ model StudentPayment {
   installmentId String?  // رابط مع قسط محدد
   notes         String?
   branchId      String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false) // هل تم شطب الوصل
+  cancelledAt   DateTime? // تاريخ الشطب
+  cancelReason  String?  // سبب الشطب
+  // ===== حقول العكس (Reversal — مرادف للشطب في نظام الأقساط) =====
+  isReversed    Boolean  @default(false) // هل تم عكس الدفعة
+  reversedAt    DateTime? // تاريخ العكس
+  reversedBy    String?  // اسم الموظف الذي عكسها
+  // ===== حقول إضافية للنظام =====
+  receivedBy    String?  // معرّف المستخدم الذي استلم الدفعة
+  receivedByName String? // اسم المستخدم الذي استلم الدفعة
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   student       Student  @relation(fields: [studentId], references: [id])
@@ -340,6 +351,7 @@ model StudentPayment {
   @@index([studentId])
   @@index([installmentId])
   @@index([receiptNumber])
+  @@index([isCancelled])
 }
 
 // ===== مدفوعات الأساتذة (الرواتب) =====
@@ -353,6 +365,10 @@ model TeacherPayment {
   paymentType   String   @default("salary") // "salary" | "bonus" | "advance"
   paymentLabel  String?  // "راتب" | "منحة" | "سلفة"
   notes         String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   teacher       Teacher  @relation(fields: [teacherId], references: [id])
@@ -360,6 +376,7 @@ model TeacherPayment {
   // ===== Database indexes for performance =====
   @@index([teacherId])
   @@index([paymentDate])
+  @@index([isCancelled])
 }
 
 // ===== المصاريف الثانوية =====
@@ -370,6 +387,10 @@ model Expense {
   description String?                        // وصف/ملاحظات
   amount      Float                          // المبلغ
   branchId    String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled Boolean  @default(false)
+  cancelledAt DateTime?
+  cancelReason String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   branch      Branch? @relation(fields: [branchId], references: [id])
@@ -377,6 +398,7 @@ model Expense {
   // ===== Database indexes for performance =====
   @@index([date, branchId])
   @@index([type])
+  @@index([isCancelled])
 }
 
 // ===== إعدادات النظام =====
@@ -899,4 +921,49 @@ model Payment {
   @@index([studentId])
   @@index([receiptNumber])
   @@index([paymentDate])
+}
+
+// ===== الرسائل الداخلية =====
+model Message {
+  id           String   @id @default(cuid())
+  senderId     String
+  senderName   String?
+  senderRole   String?
+  recipientId  String?  // null = رسالة جماعية للمدير
+  recipientName String?
+  subject      String
+  content      String
+  priority     String   @default("normal") // "low" | "normal" | "high" | "urgent"
+  isRead       Boolean  @default(false)
+  readAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([recipientId, isRead])
+  @@index([senderId])
+}
+
+// ===== مدفوعات الموظفين (الرواتب) =====
+// تُستخدم لتسجيل رواتب الموظفين (غير الأساتذة) — متممة لـ TeacherPayment
+model StaffPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل (مثال: STF-5001)
+  staffName     String   // اسم الموظف
+  staffRole     String?  // وظيفة الموظف (مثال: "مدير", "موظف استقبال")
+  userId        String?  // رابط اختياري بجدول User (لو الموظف له حساب)
+  amount        Float    // المبلغ المدفوع
+  month         String?  // الشهر: "2024-01"
+  paymentDate   DateTime // تاريخ الدفع
+  note          String?  // ملاحظات مركّبة: "paymentLabel - (type) - notes"
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // ===== Database indexes for performance =====
+  @@index([staffName])
+  @@index([paymentDate])
+  @@index([receiptNumber])
+  @@index([isCancelled])
 }
