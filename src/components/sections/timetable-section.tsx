@@ -16,6 +16,7 @@ import {
   Plus, Edit, Trash2, Calendar, DoorOpen, Users, BookOpen, Clock, PartyPopper, Settings,
   Sparkles, Download, Search, AlertCircle, CheckCircle2, Filter, Printer, LayoutGrid,
   CalendarDays, User, Building2, GraduationCap, BookText, AlertTriangle, Layers, Network,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -30,7 +31,7 @@ const SUBJECT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '
 
 // Main component
 export function TimetableSection({ isDirector = false, canManageTimetable = false }: { isDirector?: boolean; canManageTimetable?: boolean }) {
-  const [activeTab, setActiveTab] = useState('week');
+  const [activeTab, setActiveTab] = useState('calendar');
   // canManage = director OR employee with canManageTimetable permission
   const canManage = isDirector || canManageTimetable;
 
@@ -44,7 +45,8 @@ export function TimetableSection({ isDirector = false, canManageTimetable = fals
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 lg:grid-cols-10">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 lg:grid-cols-11">
+          <TabsTrigger value="calendar"><CalendarDays className="w-4 h-4 ml-1" /> تقويم</TabsTrigger>
           <TabsTrigger value="week"><CalendarDays className="w-4 h-4 ml-1" /> أسبوعي</TabsTrigger>
           <TabsTrigger value="day"><Calendar className="w-4 h-4 ml-1" /> يومي</TabsTrigger>
           <TabsTrigger value="department"><Layers className="w-4 h-4 ml-1" /> الأقسام</TabsTrigger>
@@ -57,6 +59,7 @@ export function TimetableSection({ isDirector = false, canManageTimetable = fals
           <TabsTrigger value="stats"><Filter className="w-4 h-4 ml-1" /> إحصائيات</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="calendar"><MonthCalendarView isDirector={canManage} /></TabsContent>
         <TabsContent value="week"><WeekView isDirector={canManage} /></TabsContent>
         <TabsContent value="day"><DayView isDirector={canManage} /></TabsContent>
         <TabsContent value="department"><DepartmentView isDirector={canManage} /></TabsContent>
@@ -68,6 +71,335 @@ export function TimetableSection({ isDirector = false, canManageTimetable = fals
         <TabsContent value="manage"><ManagementView isDirector={canManage} /></TabsContent>
         <TabsContent value="stats"><StatsView /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ============ MONTH CALENDAR VIEW (New) ============
+// عرض تقويم شهري جذاب مع نقاط ملونة للأحداث
+function MonthCalendarView({ isDirector }: { isDirector: boolean }) {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentMonth, setCurrentMonth] = useState(new Date()); // first day of month
+  const [selectedDate, setSelectedDate] = useState(new Date()); // selected day
+  const { toast } = useToast();
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/timetable/sessions');
+      const data = await res.json();
+      setSessions(data.sessions || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // Helper: format date as YYYY-MM-DD
+  const dateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // Group sessions by dayOfWeek (0-6, Sunday=0)
+  const sessionsByDay = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    for (const s of sessions) {
+      const d = s.dayOfWeek ?? 0;
+      if (!map[d]) map[d] = [];
+      map[d].push(s);
+    }
+    // Sort each day's sessions by startTime
+    for (const d in map) {
+      map[d].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    }
+    return map;
+  }, [sessions]);
+
+  // Get days in month + leading empty cells (RTL: Sunday first)
+  const calendarDays = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const firstDayOfWeek = firstDay.getDay(); // 0=Sunday
+    const daysInMonth = lastDay.getDate();
+
+    const days: (Date | null)[] = [];
+    // Leading nulls (so the 1st lands on the correct weekday column)
+    for (let i = 0; i < firstDayOfWeek; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, month, d));
+    // Trailing nulls to fill the last row
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [currentMonth]);
+
+  // Sessions for selected date (by dayOfWeek)
+  const selectedDaySessions = (sessionsByDay[selectedDate.getDay()] || []).filter(
+    (s) => !s.isHoliday
+  );
+
+  // Helpers for month navigation
+  const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedDate(today);
+  };
+
+  const prevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const isToday = (d: Date) => isSameDay(d, new Date());
+
+  // Color palette for event types
+  const getEventColor = (session: any) => {
+    const type = session.subject?.type || session.notes || '';
+    if (type.includes('محاضرة') || type.includes('lecture')) return { dot: '#3b82f6', badge: 'bg-blue-100 text-blue-700 border-blue-200' };
+    if (type.includes('أعمال') || type.includes('practice') || type.includes('تطبيق')) return { dot: '#f59e0b', badge: 'bg-amber-100 text-amber-700 border-amber-200' };
+    return { dot: '#10b981', badge: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+  };
+
+  const formatTime = (t: string) => {
+    if (!t) return '';
+    // Convert "13:00:00" or "13:00" to "13:00"
+    return t.slice(0, 5);
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-4">
+      {/* === CALENDAR (Right) === */}
+      <div className="bg-white rounded-3xl shadow-lg overflow-hidden border border-emerald-100">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-emerald-800 to-emerald-700 text-white p-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-6 h-6 text-amber-300" />
+            <h3 className="text-xl font-bold">
+              {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevMonth}
+              className="w-9 h-9 rounded-full bg-emerald-900/40 hover:bg-emerald-900/60 flex items-center justify-center transition"
+              title="الشهر السابق"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={goToToday}
+              className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-emerald-900 text-sm font-bold transition"
+            >
+              اليوم
+            </button>
+            <button
+              onClick={nextMonth}
+              className="w-9 h-9 rounded-full bg-emerald-900/40 hover:bg-emerald-900/60 flex items-center justify-center transition"
+              title="الشهر التالي"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Weekday header */}
+        <div className="grid grid-cols-7 bg-emerald-50 border-b border-emerald-100">
+          {dayNames.map((d) => (
+            <div key={d} className="text-center py-2 text-xs font-bold text-emerald-900">
+              {d}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar grid */}
+        <div className="grid grid-cols-7 gap-0">
+          {calendarDays.map((day, i) => {
+            if (!day) {
+              return <div key={i} className="min-h-[80px] bg-emerald-50/30 border border-emerald-50" />;
+            }
+            const daySessions = sessionsByDay[day.getDay()] || [];
+            const isTodayBool = isToday(day);
+            const isSelectedBool = isSameDay(day, selectedDate);
+            // Unique event colors for this day (max 3 dots)
+            const dayColors = Array.from(new Set(daySessions.map((s) => getEventColor(s).dot))).slice(0, 3);
+
+            return (
+              <button
+                key={i}
+                onClick={() => setSelectedDate(day)}
+                className={`min-h-[80px] p-1.5 border border-emerald-50 text-right flex flex-col items-start justify-between hover:bg-emerald-50 transition relative
+                  ${isTodayBool ? 'bg-amber-50' : ''}
+                  ${isSelectedBool ? 'ring-2 ring-emerald-500 ring-inset' : ''}
+                `}
+              >
+                <span
+                  className={`text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center
+                    ${isTodayBool ? 'bg-emerald-700 text-white' : 'text-emerald-900'}
+                  `}
+                >
+                  {day.getDate()}
+                </span>
+
+                {/* Event dots */}
+                {dayColors.length > 0 && (
+                  <div className="flex gap-1 mt-auto">
+                    {dayColors.map((c, idx) => (
+                      <span
+                        key={idx}
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    {daySessions.length > 3 && (
+                      <span className="text-[9px] text-emerald-700 font-bold">+{daySessions.length - 3}</span>
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* === SIDEBAR (Left) - Selected day events === */}
+      <div className="space-y-3">
+        {/* Day header */}
+        <div className="bg-gradient-to-l from-emerald-50 to-white rounded-2xl shadow-md border border-emerald-100 overflow-hidden">
+          <div className="bg-emerald-100/60 p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-emerald-700" />
+              <span className="font-bold text-emerald-900 text-sm">
+                {dayNames[selectedDate.getDay()]}، {selectedDate.getDate()} {monthNames[selectedDate.getMonth()]} {selectedDate.getFullYear()}
+              </span>
+            </div>
+            {selectedDaySessions.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-400 text-emerald-900 text-xs font-bold">
+                {selectedDaySessions.length} حدث
+              </span>
+            )}
+          </div>
+
+          <div className="p-3">
+            {loading ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">جاري التحميل...</div>
+            ) : selectedDaySessions.length === 0 ? (
+              <div className="text-center py-6">
+                <div className="w-12 h-12 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                  <Calendar className="w-6 h-6 text-emerald-300" />
+                </div>
+                <p className="font-bold text-emerald-900 text-sm">لا أحداث في هذا اليوم</p>
+                <p className="text-xs text-muted-foreground mt-1">يوم خالٍ من المحاضرات والحصص</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {selectedDaySessions.map((s) => {
+                  const color = getEventColor(s);
+                  const sessionType = s.subject?.type || (s.notes?.includes('محاضرة') ? 'محاضرة' : s.notes?.includes('أعمال') ? 'أعمال تطبيقية' : 'حصة');
+                  return (
+                    <div
+                      key={s.id}
+                      className={`rounded-xl p-2.5 border ${color.badge} flex items-start gap-2`}
+                    >
+                      {/* Time */}
+                      <div className="flex-shrink-0 text-xs font-bold text-emerald-900 num pt-1">
+                        <div>{formatTime(s.startTime)}</div>
+                        <div className="text-emerald-500">↓</div>
+                        <div>{formatTime(s.endTime)}</div>
+                      </div>
+
+                      {/* Vertical line */}
+                      <div className="w-1 self-stretch rounded-full" style={{ backgroundColor: color.dot }} />
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-emerald-900 text-sm truncate">
+                          {s.subject?.name || 'حصة'}
+                        </div>
+                        <div className="text-xs text-emerald-700 mt-0.5">{sessionType}</div>
+                        <div className="flex items-center gap-1 text-xs text-emerald-600 mt-1">
+                          <Building2 className="w-3 h-3" />
+                          <span>{s.room?.name || 'بدون قاعة'}</span>
+                          {s.group && (
+                            <>
+                              <span className="mx-1">·</span>
+                              <Users className="w-3 h-3" />
+                              <span>{s.group.name}</span>
+                            </>
+                          )}
+                        </div>
+                        {s.teacher && (
+                          <div className="flex items-center gap-1 text-xs text-emerald-600 mt-0.5">
+                            <User className="w-3 h-3" />
+                            <span>{s.teacher.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-3">
+          <h4 className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" /> مفتاح الألوان
+          </h4>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} />
+              <span className="text-emerald-800">حصة عامة</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
+              <span className="text-emerald-800">محاضرة</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f59e0b' }} />
+              <span className="text-emerald-800">أعمال تطبيقية</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="bg-gradient-to-br from-emerald-50 to-white rounded-2xl shadow-sm border border-emerald-100 p-3">
+          <h4 className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> إحصائيات الشهر
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="p-2 bg-emerald-50 rounded-lg">
+              <p className="text-xl font-bold text-emerald-900 num">{sessions.length}</p>
+              <p className="text-[10px] text-emerald-700">حصة أسبوعية</p>
+            </div>
+            <div className="p-2 bg-amber-50 rounded-lg">
+              <p className="text-xl font-bold text-amber-700 num">
+                {Object.keys(sessionsByDay).length}
+              </p>
+              <p className="text-[10px] text-amber-700">أيام نشطة</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
