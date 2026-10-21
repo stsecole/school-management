@@ -2919,11 +2919,11 @@ function StatsView() {
         </div>
         <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-4">
           <p className="text-sm text-emerald-700">الأساتذة النشطون</p>
-          <p className="text-2xl font-bold num text-emerald-900">{stats.teacherStats?.length || 0}</p>
+          <p className="text-2xl font-bold num text-emerald-900">{stats.teacherUtilization?.length || 0}</p>
         </div>
         <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-4">
           <p className="text-sm text-emerald-700">القاعات المستعملة</p>
-          <p className="text-2xl font-bold num text-emerald-900">{stats.roomStats?.length || 0}</p>
+          <p className="text-2xl font-bold num text-emerald-900">{stats.roomUtilization?.length || 0}</p>
         </div>
         <div className="bg-white rounded-2xl shadow-md border border-emerald-100 p-4">
           <p className="text-sm text-emerald-700">المواد المجدولة</p>

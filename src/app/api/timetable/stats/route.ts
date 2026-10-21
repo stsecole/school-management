@@ -89,9 +89,10 @@ export async function GET() {
     });
 
     // Teacher utilization rate (based on maxTeacherHoursPerWeek setting)
-    const workSettings = await db.workSettings.findFirst();
+    // Filter teachers by current branch — only show teachers that belong to the active branch
+    const workSettings = await db.workSettings.findFirst({ where: branchFilter });
     const maxTeacherHours = workSettings?.maxTeacherHoursPerWeek || 20;
-    const teachers = await db.teacher.findMany({ where: { status: 'active' } });
+    const teachers = await db.teacher.findMany({ where: { ...branchFilter, status: 'active' } });
     const teacherUtilization = teachers.map(t => {
       const stats = teacherHours[t.id] || { name: t.name, hours: 0, sessions: 0 };
       return {
