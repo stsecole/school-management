@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 export async function GET() {
   try {
     await requireAuth();
+    const branchFilter = await getBranchFilter();
     const groups = await db.group.findMany({
+      where: branchFilter,
       include: {
         department: true,
         specialization: true,
@@ -33,6 +36,7 @@ export async function POST(request: NextRequest) {
         level: body.level || null,
         studentCount: parseInt(body.studentCount) || 0,
         notes: body.notes || null,
+        branchId: await getBranchIdForNewRecord(),
       },
       include: { department: true, specialization: true },
     });

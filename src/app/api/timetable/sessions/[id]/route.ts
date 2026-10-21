@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, requireTimetableManage } from '@/lib/auth';
 import { checkSessionConflicts, SessionInput } from '@/lib/timetable/conflict-engine';
+import { getBranchFilter } from '@/lib/branch-filter';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,14 +10,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const body = await request.json();
 
-    // Conflict detection (exclude current session)
+    // Conflict detection (exclude current session, scoped to current branch)
+    const branchFilter = await getBranchFilter();
     const existingSessions = await db.timetableSession.findMany({
-      where: { NOT: { id } },
+      where: { ...branchFilter, NOT: { id } },
     });
-    const rooms = await db.room.findMany();
-    const subjects = await db.subject.findMany();
-    const holidays = await db.holiday.findMany();
-    const workSettings = (await db.workSettings.findFirst()) || {
+    const rooms = await db.room.findMany({ where: branchFilter });
+    const subjects = await db.subject.findMany({ where: branchFilter });
+    const holidays = await db.holiday.findMany({ where: branchFilter });
+    const workSettings = (await db.workSettings.findFirst({ where: branchFilter })) || {
       workDays: '0,1,2,3,4',
       workStartTime: '08:00',
       workEndTime: '18:00',

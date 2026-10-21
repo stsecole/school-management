@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 export async function GET() {
   try {
     await requireAuth();
+    const branchFilter = await getBranchFilter();
     const timeSlots = await db.timeSlot.findMany({
+      where: branchFilter,
       orderBy: [{ dayOfWeek: 'asc' }, { order: 'asc' }],
     });
     return NextResponse.json({ timeSlots });
@@ -26,6 +29,7 @@ export async function POST(request: NextRequest) {
         startTime: body.startTime,
         endTime: body.endTime,
         order: parseInt(body.order) || 0,
+        branchId: await getBranchIdForNewRecord(),
       },
     });
     return NextResponse.json({ timeSlot }, { status: 201 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, requireTimetableManage } from '@/lib/auth';
 import { checkSessionConflicts, SessionInput } from '@/lib/timetable/conflict-engine';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
     const subjectId = searchParams.get('subjectId');
     const dayOfWeek = searchParams.get('dayOfWeek');
 
-    const where: any = {};
+    const branchFilter = await getBranchFilter();
+    const where: any = { ...branchFilter };
     if (teacherId && teacherId !== 'all') where.teacherId = teacherId;
     if (roomId && roomId !== 'all') where.roomId = roomId;
     if (groupId && groupId !== 'all') where.groupId = groupId;
@@ -46,12 +48,13 @@ export async function POST(request: NextRequest) {
     await requireTimetableManage();
     const body = await request.json();
 
-    // ===== Conflict Detection =====
-    const existingSessions = await db.timetableSession.findMany();
-    const rooms = await db.room.findMany();
-    const subjects = await db.subject.findMany();
-    const holidays = await db.holiday.findMany();
-    const workSettings = (await db.workSettings.findFirst()) || {
+    // ===== Conflict Detection (filter existing sessions by current branch) =====
+    const branchFilter = await getBranchFilter();
+    const existingSessions = await db.timetableSession.findMany({ where: branchFilter });
+    const rooms = await db.room.findMany({ where: branchFilter });
+    const subjects = await db.subject.findMany({ where: branchFilter });
+    const holidays = await db.holiday.findMany({ where: branchFilter });
+    const workSettings = (await db.workSettings.findFirst({ where: branchFilter })) || {
       workDays: '0,1,2,3,4',
       workStartTime: '08:00',
       workEndTime: '18:00',
@@ -108,6 +111,7 @@ export async function POST(request: NextRequest) {
         notes: body.notes || null,
         color: body.color || null,
         timeSlotId: body.timeSlotId || null,
+        branchId: await getBranchIdForNewRecord(),
       },
       include: {
         teacher: true,

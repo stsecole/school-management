@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 export async function GET() {
   try {
     await requireAuth();
+    const branchFilter = await getBranchFilter();
     const rooms = await db.room.findMany({
+      where: branchFilter,
       include: { _count: { select: { sessions: true } } },
       orderBy: { name: 'asc' },
     });
@@ -29,6 +32,7 @@ export async function POST(request: NextRequest) {
         building: body.building || null,
         floor: body.floor || null,
         notes: body.notes || null,
+        branchId: await getBranchIdForNewRecord(),
       },
     });
     return NextResponse.json({ room }, { status: 201 });

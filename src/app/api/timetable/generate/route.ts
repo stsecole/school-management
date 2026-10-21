@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
 import { generateTimetable } from '@/lib/timetable/auto-generator';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 // POST /api/timetable/generate
 // Body: { clearExisting?: boolean, subjectIds?: string[], groupIds?: string[] }
@@ -11,16 +12,20 @@ export async function POST(request: NextRequest) {
     await requireDirector();
     const body = await request.json();
 
-    const subjects = await db.subject.findMany({
-      where: body.subjectIds ? { id: { in: body.subjectIds } } : undefined,
-    });
-    const teachers = await db.teacher.findMany({ where: { status: 'active' } });
-    const rooms = await db.room.findMany();
-    const groups = await db.group.findMany({
-      where: body.groupIds ? { id: { in: body.groupIds } } : undefined,
-    });
-    const holidays = await db.holiday.findMany();
-    const workSettings = (await db.workSettings.findFirst()) || (await db.workSettings.create({ data: {} }));
+    const branchFilter = await getBranchFilter();
+    const newBranchId = await getBranchIdForNewRecord();
+
+    // Combine subject/group filter with branch filter
+    const subjectWhere = { ...branchFilter, ...(body.subjectIds ? { id: { in: body.subjectIds } } : {}) };
+    const groupWhere = { ...branchFilter, ...(body.groupIds ? { id: { in: body.groupIds } } : {}) };
+
+    const subjects = await db.subject.findMany({ where: subjectWhere });
+    const teachers = await db.teacher.findMany({ where: { ...branchFilter, status: 'active' } });
+    const rooms = await db.room.findMany({ where: branchFilter });
+    const groups = await db.group.findMany({ where: groupWhere });
+    const holidays = await db.holiday.findMany({ where: branchFilter });
+    const workSettings = (await db.workSettings.findFirst({ where: branchFilter })) ||
+      (await db.workSettings.create({ data: { branchId: newBranchId } }));
 
     if (subjects.length === 0 || groups.length === 0 || rooms.length === 0) {
       return NextResponse.json(
@@ -29,13 +34,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get existing sessions (to preserve or clear)
+    // Get existing sessions (to preserve or clear) — scoped to current branch
     const existingSessions = body.clearExisting
       ? []
-      : await db.timetableSession.findMany();
+      : await db.timetableSession.findMany({ where: branchFilter });
 
     if (body.clearExisting) {
-      await db.timetableSession.deleteMany();
+      await db.timetableSession.deleteMany({ where: branchFilter });
     }
 
     const result = generateTimetable({
@@ -48,7 +53,7 @@ export async function POST(request: NextRequest) {
       existingSessions: existingSessions as any,
     });
 
-    // Save generated sessions to DB
+    // Save generated sessions to DB (with branchId)
     const created = [];
     for (const session of result.sessions) {
       const s = await db.timetableSession.create({
@@ -65,6 +70,7 @@ export async function POST(request: NextRequest) {
           subjectId: session.subjectId || null,
           subjectName: session.subjectName || null,
           color: session.color || null,
+          branchId: newBranchId,
         },
       });
       created.push(s);

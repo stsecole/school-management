@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 export async function GET() {
   try {
     await requireAuth();
-    let settings = await db.workSettings.findFirst();
+    const branchFilter = await getBranchFilter();
+    let settings = await db.workSettings.findFirst({ where: branchFilter });
     if (!settings) {
-      settings = await db.workSettings.create({ data: {} });
+      settings = await db.workSettings.create({ data: { branchId: await getBranchIdForNewRecord() } });
     }
     return NextResponse.json({ settings });
   } catch (e: any) {
@@ -20,7 +22,8 @@ export async function PUT(request: NextRequest) {
   try {
     await requireAuth();
     const body = await request.json();
-    let settings = await db.workSettings.findFirst();
+    const branchFilter = await getBranchFilter();
+    let settings = await db.workSettings.findFirst({ where: branchFilter });
     const data = {
       workDays: body.workDays || '0,1,2,3,4',
       workStartTime: body.workStartTime || '08:00',
@@ -29,6 +32,7 @@ export async function PUT(request: NextRequest) {
       breakDuration: parseInt(body.breakDuration) || 15,
       maxTeacherHoursPerWeek: parseInt(body.maxTeacherHoursPerWeek) || 20,
       maxSessionsPerDay: parseInt(body.maxSessionsPerDay) || 4,
+      branchId: settings?.branchId || await getBranchIdForNewRecord(),
     };
     if (settings) {
       settings = await db.workSettings.update({ where: { id: settings.id }, data });

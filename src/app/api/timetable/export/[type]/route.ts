@@ -26,6 +26,13 @@ export async function GET(
     if (view === 'room' && entityId) where.roomId = entityId;
     if (view === 'group' && entityId) where.groupId = entityId;
     if (view === 'subject' && entityId) where.subjectId = entityId;
+    if (view === 'department' && entityId) {
+      // Filter sessions whose subject or group belongs to the department
+      where.OR = [
+        { subject: { departmentId: entityId } },
+        { group: { departmentId: entityId } },
+      ];
+    }
 
     const sessions = await db.timetableSession.findMany({
       where,

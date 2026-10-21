@@ -57,6 +57,14 @@ model Branch {
   documents     Document[]
   exams         Exam[]
   leads         Lead[]
+  // ===== العلاقات العكسية لوحدة الجدول الأسبوعي =====
+  rooms             Room[]
+  groups            Group[]
+  subjects          Subject[]
+  timeSlots         TimeSlot[]
+  holidays          Holiday[]
+  workSettings      WorkSettings[]
+  timetableSessions TimetableSession[]
 }
 
 // ===== الأقسام والشعب =====
@@ -421,9 +429,11 @@ model Room {
   building    String?
   floor       String?
   notes       String?
+  branchId    String?  // الفرع الذي تنتمي إليه القاعة
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   sessions    TimetableSession[]
+  branch      Branch?  @relation(fields: [branchId], references: [id])
 }
 
 // الأفواج
@@ -436,10 +446,12 @@ model Group {
   level           String?
   studentCount    Int      @default(0)
   notes           String?
+  branchId        String?  // الفرع الذي ينتمي إليه الفوج
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   department      Department? @relation(fields: [departmentId], references: [id])
   specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  branch          Branch?  @relation(fields: [branchId], references: [id])
   sessions        TimetableSession[]
 }
 
@@ -454,10 +466,12 @@ model Subject {
   requiredRoomType String? // "lab" | "computer_lab" | "amphitheater" | null
   color           String?
   notes           String?
+  branchId        String?  // الفرع الذي تنتمي إليه المادة
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   department      Department? @relation(fields: [departmentId], references: [id])
   specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  branch          Branch?  @relation(fields: [branchId], references: [id])
   teacherId       String?
   teacher         Teacher? @relation(fields: [teacherId], references: [id])
   sessions        TimetableSession[]
@@ -471,8 +485,10 @@ model TimeSlot {
   startTime   String   // "08:00"
   endTime     String   // "10:00"
   order       Int
+  branchId    String?  // الفرع الذي تنتمي إليه الفترة
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
   sessions    TimetableSession[]
 }
 
@@ -483,8 +499,10 @@ model Holiday {
   startDate   DateTime
   endDate     DateTime
   type        String   @default("holiday") // "holiday" | "exam" | "event"
+  branchId    String?  // الفرع الذي تنطبق عليه العطلة (null = كل الفروع)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
 }
 
 // إعدادات الدوام
@@ -497,8 +515,10 @@ model WorkSettings {
   breakDuration   Int      @default(15)
   maxTeacherHoursPerWeek Int @default(20)
   maxSessionsPerDay Int    @default(4)
+  branchId        String?  // الفرع (null = إعدادات عامة)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  branch          Branch?  @relation(fields: [branchId], references: [id])
 }
 
 // الحصص
@@ -517,6 +537,7 @@ model TimetableSession {
   subjectName String?
   notes       String?
   color       String?
+  branchId    String?  // الفرع الذي تنتمي إليه الحصة
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   teacher     Teacher? @relation(fields: [teacherId], references: [id])
@@ -525,6 +546,10 @@ model TimetableSession {
   subject     Subject? @relation(fields: [subjectId], references: [id])
   timeSlot    TimeSlot? @relation(fields: [timeSlotId], references: [id])
   timeSlotId  String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([dayOfWeek, branchId])
 }
 
 // ===== حضور الموظفين (Employee Timesheet) =====

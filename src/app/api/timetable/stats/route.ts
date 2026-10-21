@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter } from '@/lib/branch-filter';
 
 // GET /api/timetable/stats - timetable statistics
 export async function GET() {
   try {
     await requireAuth();
+    const branchFilter = await getBranchFilter();
 
     const sessions = await db.timetableSession.findMany({
+      where: branchFilter,
       include: { teacher: true, room: true, group: true, subject: true },
     });
 
@@ -71,7 +74,7 @@ export async function GET() {
     }
 
     // Room utilization rate (based on 6 days × 10 hours = 60 hours max per week)
-    const rooms = await db.room.findMany();
+    const rooms = await db.room.findMany({ where: branchFilter });
     const maxRoomHoursPerWeek = 60; // approx
     const roomUtilization = rooms.map(r => {
       const stats = roomStats[r.id] || { name: r.name, hours: 0, sessions: 0 };
