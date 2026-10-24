@@ -1,120 +1,101 @@
-// ===== GET /api/job-applications/file?path=xxx =====
-// معاينة/تنزيل ملف مرفوع لطلب عمل
-// يدعم المسارات:
-// - /uploads/jobs/filename (public)
-// - uploads/jobs/filename (نسبي)
-// - /download/job-files/filename (fallback)
+// ===== POST /api/job-applications/file =====
+// رفع ملف (دبلوم أو سيرة ذاتية) — يستخدم Vercel Blob أو التخزين المحلي
 
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { requireAuth } from '@/lib/auth';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const filePath = searchParams.get('path');
-    const download = searchParams.get('download') === 'true';
+    await requireAuth();
 
-    if (!filePath) {
-      return NextResponse.json({ error: 'مسار الملف مطلوب' }, { status: 400 });
+    const formData = await request.formData();
+    const file = formData.get('file');
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json({ error: 'ملف مطلوب' }, { status: 400 });
     }
 
-    // أمان: منع path traversal
-    if (filePath.includes('..') || filePath.startsWith('//')) {
-      return NextResponse.json({ error: 'مسار غير صالح' }, { status: 400 });
+    // تحقق من حجم الملف (10MB أقصى حد)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json({ error: 'حجم الملف كبير جداً (الحد الأقصى 10MB)' }, { status: 413 });
     }
 
-    // تطبيع المسار (إزالة / من البداية)
-    let relativePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-
-    // قائمة المجلدات المسموح بها
-    const allowedDirs = ['uploads/jobs', 'download/job-files'];
-    const isAllowed = allowedDirs.some(dir => relativePath.startsWith(dir));
-    if (!isAllowed) {
-      return NextResponse.json({ error: 'مسار غير مصرح به' }, { status: 403 });
+    // تحقق من نوع الملف
+    const allowedTypes = [
+      'application/pdf',
+      'image/jpeg', 'image/png', 'image/webp',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json({ error: `نوع الملف غير مسموح: ${file.type}` }, { status: 415 });
     }
 
-    // تحويل المسار إلى مطلق
-    const absolutePath = path.join(process.cwd(), 'public', relativePath);
-
-    // تحقق من وجود الملف في public/
-    let fileExists = false;
-    try {
-      await fs.access(absolutePath);
-      fileExists = true;
-    } catch {
-      fileExists = false;
-    }
-
-    // إذا لم يوجد في public/, ابحث في download/job-files/
-    let actualPath = absolutePath;
-    if (!fileExists) {
-      const filename = path.basename(relativePath);
-      const fallbackPath = path.join(process.cwd(), 'download', 'job-files', filename);
+    // === 1) محاولة Vercel Blob أولاً ===
+    if (process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_BLOB_READ_WRITE_TOKEN) {
       try {
-        await fs.access(fallbackPath);
-        actualPath = fallbackPath;
-        fileExists = true;
-      } catch {
-        // غير موجود في كلا المكانين
-        return NextResponse.json({ error: 'الملف غير موجود' }, { status: 404 });
+        // Use Function() indirection to bypass static analysis of the import path
+        // (Vercel Blob is an optional heavy dependency; if missing, runtime try/catch handles it)
+        const moduleName = '@vercel/blob';
+        const blobModule = await (Function('m', `return import(m)`) as (m: string) => Promise<any>)(moduleName);
+        const put = blobModule.put;
+        const safeName = file.name.replace(/[^\w.-]/g, '_').slice(0, 100);
+        const filename = `jobs/${randomUUID()}-${safeName}`;
+        const blob = await put(filename, file, {
+          access: 'public',
+          addRandomSuffix: true,
+        });
+        return NextResponse.json({
+          url: blob.url,
+          filename: blob.pathname,
+          size: file.size,
+          provider: 'vercel-blob',
+        });
+      } catch (blobErr: any) {
+        const errMsg = (blobErr?.message || String(blobErr)).toLowerCase();
+        const isNoToken = errMsg.includes('token') || errMsg.includes('unauthorized');
+        console.error('Vercel Blob upload failed:', blobErr?.message || blobErr);
+        if (process.env.VERCEL || process.env.NOW_REGION) {
+          return NextResponse.json({
+            error: isNoToken
+              ? 'خدمة رفع الملفات غير مُعدّة. اربط Vercel Blob Store.'
+              : 'فشل رفع الملف إلى Vercel Blob',
+            details: blobErr?.message,
+          }, { status: 503 });
+        }
       }
     }
 
-    if (!fileExists) {
-      return NextResponse.json({ error: 'الملف غير موجود' }, { status: 404 });
-    }
+    // === 2) التخزين المحلي (للتطوير المحلي) ===
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    const ext = path.extname(file.name).toLowerCase() || (file.type === 'application/pdf' ? '.pdf' : '');
+    const localFilename = `${randomUUID()}${ext}`;
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'jobs');
+    await fs.mkdir(uploadDir, { recursive: true });
+    const fullPath = path.join(uploadDir, localFilename);
+    await fs.writeFile(fullPath, buffer);
 
-    // قراءة الملف
-    const fileBuffer = await fs.readFile(actualPath);
-    const filename = path.basename(actualPath);
-    const ext = path.extname(filename).toLowerCase();
-
-    // تحديد Content-Type
-    let contentType = 'application/octet-stream';
-    let isInline = true;
-
-    switch (ext) {
-      case '.pdf':
-        contentType = 'application/pdf';
-        isInline = true;
-        break;
-      case '.jpg':
-      case '.jpeg':
-        contentType = 'image/jpeg';
-        isInline = true;
-        break;
-      case '.png':
-        contentType = 'image/png';
-        isInline = true;
-        break;
-      default:
-        isInline = false;
-    }
-
-    // إعداد الاستجابة
-    const headers = new Headers();
-    headers.set('Content-Type', contentType);
-    headers.set('Content-Length', fileBuffer.length.toString());
-    headers.set('Cache-Control', 'public, max-age=3600');
-
-    if (download || !isInline) {
-      headers.set('Content-Disposition', `attachment; filename="${filename}"`);
-    } else {
-      headers.set('Content-Disposition', `inline; filename="${filename}"`);
-    }
-
-    return new NextResponse(fileBuffer, {
-      status: 200,
-      headers,
+    return NextResponse.json({
+      url: `/uploads/jobs/${localFilename}`,
+      filename: localFilename,
+      size: file.size,
+      provider: 'local',
     });
   } catch (error: any) {
-    console.error('GET /api/job-applications/file error:', error);
-    return NextResponse.json({
-      error: 'حدث خطأ: ' + (error.message || ''),
-    }, { status: 500 });
+    if (error.message === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    }
+    console.error('POST /api/job-applications/file error:', error);
+    return NextResponse.json(
+      { error: 'فشل رفع الملف', details: error.message || String(error) },
+      { status: 500 }
+    );
   }
 }

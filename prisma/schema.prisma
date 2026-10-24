@@ -65,6 +65,7 @@ model Branch {
   holidays          Holiday[]
   workSettings      WorkSettings[]
   timetableSessions TimetableSession[]
+  jobApplications   JobApplication[]
 }
 
 // ===== الأقسام والشعب =====
@@ -991,4 +992,30 @@ model StaffPayment {
   @@index([paymentDate])
   @@index([receiptNumber])
   @@index([isCancelled])
+}
+
+// ===== طلبات العمل (Job Applications) =====
+model JobApplication {
+  id          String   @id @default(cuid())
+  name        String   // الاسم واللقب
+  birthDate   DateTime? // تاريخ الميلاد
+  phone       String?  // رقم الهاتف
+  email       String?  // الايميل
+  whatsapp    String?  // الوتس اب
+  diploma     String?  // الدبلوم
+  experience  String?  // الخبرة
+  address     String?  // العنوان
+  note        String?  // ملاحظة
+  cvUrl       String?  // رابط ملف السيرة الذاتية
+  diplomaUrl  String?  // رابط ملف الدبلوم
+  status      String   @default("pending") // pending | reviewed | accepted | rejected
+  branchId    String?  // الفرع
+  appliedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([status])
+  @@index([appliedAt])
 }
