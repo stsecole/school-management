@@ -66,6 +66,7 @@ model Branch {
   workSettings      WorkSettings[]
   timetableSessions TimetableSession[]
   jobApplications   JobApplication[]
+  uploadedFiles     UploadedFile[]
 }
 
 // ===== الأقسام والشعب =====
@@ -1018,4 +1019,20 @@ model JobApplication {
   @@index([branchId])
   @@index([status])
   @@index([appliedAt])
+}
+
+// ===== تخزين الملفات في قاعدة البيانات (works on Vercel) =====
+// بدلاً من الكتابة على القرص (read-only على Vercel)، نخزّن الملفات في DB
+model UploadedFile {
+  id         String   @id @default(cuid())
+  content    Bytes    // محتوى الملف (binary)
+  fileName   String   // اسم الملف الأصلي
+  mimeType   String?  // نوع MIME (image/jpeg, application/pdf, ...)
+  size       Int      // حجم الملف بالبايت
+  branchId   String?  // الفرع
+  createdAt  DateTime @default(now())
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([createdAt])
 }
