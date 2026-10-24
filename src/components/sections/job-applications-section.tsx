@@ -110,7 +110,8 @@ export function JobApplicationsSection() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/job-applications/file', { method: 'POST', body: fd });
+      // استخدم نفس /api/upload الخاص برفع صور الطلاب
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setFormData((prev: any) => ({ ...prev, [type === 'cv' ? 'cvUrl' : 'diplomaUrl']: data.url }));
