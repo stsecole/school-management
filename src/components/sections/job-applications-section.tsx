@@ -74,10 +74,14 @@ export function JobApplicationsSection() {
       if (search) params.set('search', search);
       if (statusFilter !== 'all') params.set('status', statusFilter);
       const res = await fetch(`/api/job-applications?${params.toString()}`);
-      const data = await res.json();
-      setApplications(data.applications || []);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setApplications(data.applications || []);
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل تحميل الطلبات', variant: 'destructive' });
+      }
     } catch (e) {
-      toast({ title: 'خطأ', description: 'فشل تحميل الطلبات', variant: 'destructive' });
+      toast({ title: 'خطأ', description: 'تعذر الاتصال بالخادم', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -107,7 +111,7 @@ export function JobApplicationsSection() {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/job-applications/file', { method: 'POST', body: fd });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setFormData((prev: any) => ({ ...prev, [type === 'cv' ? 'cvUrl' : 'diplomaUrl']: data.url }));
         toast({
@@ -115,10 +119,18 @@ export function JobApplicationsSection() {
           description: type === 'cv' ? 'تم رفع السيرة الذاتية' : 'تم رفع ملف الدبلوم',
         });
       } else {
-        toast({ title: 'خطأ', description: data.error || 'فشل الرفع', variant: 'destructive' });
+        toast({
+          title: 'خطأ في رفع الملف',
+          description: data.error || 'فشل الرفع',
+          variant: 'destructive',
+        });
       }
     } catch (e) {
-      toast({ title: 'خطأ', description: 'تعذر الاتصال', variant: 'destructive' });
+      toast({
+        title: 'خطأ في الاتصال',
+        description: 'تعذر الاتصال بالخادم',
+        variant: 'destructive',
+      });
     } finally {
       if (type === 'cv') setUploadingCv(false);
       else setUploadingDiploma(false);
@@ -139,7 +151,7 @@ export function JobApplicationsSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         toast({
           title: 'تم',
@@ -151,7 +163,7 @@ export function JobApplicationsSection() {
         toast({ title: 'خطأ', description: data.error || 'فشل الحفظ', variant: 'destructive' });
       }
     } catch (e) {
-      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
+      toast({ title: 'خطأ', description: 'تعذر الاتصال بالخادم', variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
@@ -183,7 +195,6 @@ export function JobApplicationsSection() {
   };
 
   const pending = applications.filter(a => a.status === 'pending').length;
-  const reviewed = applications.filter(a => a.status === 'reviewed').length;
   const accepted = applications.filter(a => a.status === 'accepted').length;
   const rejected = applications.filter(a => a.status === 'rejected').length;
 
@@ -299,7 +310,6 @@ export function JobApplicationsSection() {
               return (
                 <div key={a.id} className="p-4 hover:bg-emerald-50/30 transition">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
-                    {/* المعلومات الأساسية */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         <h4 className="font-bold text-emerald-900 text-base">{a.name}</h4>
@@ -356,7 +366,6 @@ export function JobApplicationsSection() {
                         <p className="text-xs text-emerald-600 mt-1 italic">📝 {a.note}</p>
                       )}
 
-                      {/* الملفات المرفقة */}
                       <div className="flex flex-wrap gap-2 mt-2">
                         {a.cvUrl && (
                           <button
@@ -377,7 +386,6 @@ export function JobApplicationsSection() {
                       </div>
                     </div>
 
-                    {/* إجراءات */}
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <Select
                         value={a.status}
@@ -515,7 +523,7 @@ export function JobApplicationsSection() {
                 value={formData.experience}
                 onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
                 rows={3}
-                placeholder="اذكر خبراتك المهنية السابقة (المنصب، الشركة، المدة)..."
+                placeholder="اذكر خبراتك المهنية السابقة..."
                 className="border-emerald-200 focus:border-emerald-500 focus:ring-emerald-200"
               />
             </div>
