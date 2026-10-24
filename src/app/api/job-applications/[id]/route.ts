@@ -6,6 +6,41 @@ import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getBranchFilter } from '@/lib/branch-filter';
 
+// نسخة مبسطة من ensureTable (لأن الجدول يجب أن يكون موجوداً قبل التحديث/الحذف)
+let tableEnsured = false;
+async function ensureTable() {
+  if (tableEnsured) return;
+  try {
+    await db.jobApplication.findFirst({ select: { id: true } });
+    tableEnsured = true;
+  } catch (e: any) {
+    try {
+      await db.$executeRaw`
+        CREATE TABLE IF NOT EXISTS "JobApplication" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "name" TEXT NOT NULL,
+          "birthDate" TIMESTAMP,
+          "phone" TEXT,
+          "email" TEXT,
+          "whatsapp" TEXT,
+          "diploma" TEXT,
+          "experience" TEXT,
+          "address" TEXT,
+          "note" TEXT,
+          "cvUrl" TEXT,
+          "diplomaUrl" TEXT,
+          "status" TEXT NOT NULL DEFAULT 'pending',
+          "branchId" TEXT,
+          "appliedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+      tableEnsured = true;
+    } catch {}
+  }
+}
+
 // PUT — تعديل طلب (تغيير الحالة، الملاحظة، إلخ)
 export async function PUT(
   request: NextRequest,
@@ -13,6 +48,7 @@ export async function PUT(
 ) {
   try {
     await requireAuth();
+    await ensureTable();
     const { id } = await params;
     const body = await request.json();
     const branchFilter = await getBranchFilter();
@@ -68,6 +104,7 @@ export async function DELETE(
 ) {
   try {
     await requireAuth();
+    await ensureTable();
     const { id } = await params;
     const branchFilter = await getBranchFilter();
 
