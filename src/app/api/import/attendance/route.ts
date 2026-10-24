@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 import * as XLSX from 'xlsx';
 
 /**
@@ -67,10 +68,12 @@ export async function POST(request: NextRequest) {
       return obj;
     });
 
-    // حمّل الأساتذة والطلاب
+    // حمّل الأساتذة والطلاب (مفلترين بالفرع الحالي)
+    const branchFilter = await getBranchFilter();
+    const branchId = await getBranchIdForNewRecord();
     const [teachers, students] = await Promise.all([
-      db.teacher.findMany({ select: { id: true, name: true } }),
-      db.student.findMany({ select: { id: true, name: true } }),
+      db.teacher.findMany({ where: branchFilter, select: { id: true, name: true } }),
+      db.student.findMany({ where: branchFilter, select: { id: true, name: true } }),
     ]);
     const teacherMap: Record<string, string> = {};
     for (const t of teachers) teacherMap[t.name.toLowerCase().trim()] = t.id;
@@ -145,6 +148,7 @@ export async function POST(request: NextRequest) {
             femaleCount,
             durationMinutes,
             notes: (r.notes || '').toString().trim() || null,
+            branchId, // ربط الحضور بالفرع الحالي
           },
         });
         successCount++;

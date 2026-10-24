@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchIdForNewRecord } from '@/lib/branch-filter';
 import * as XLSX from 'xlsx';
 
 /**
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
     });
 
     // جهّز الطلاب للإدراج
+    const branchId = await getBranchIdForNewRecord();
     const toInsert: any[] = [];
     const errors: any[] = [];
     let successCount = 0;
@@ -137,6 +139,7 @@ export async function POST(request: NextRequest) {
         address: (r.address || '').toString().trim() || null,
         status: finalStatus,
         registrationDate: new Date(),
+        branchId, // ربط الطالب بالفرع الحالي للمستخدم
       });
     }
 

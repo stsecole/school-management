@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 import * as XLSX from 'xlsx';
 
 /**
@@ -62,7 +63,9 @@ export async function POST(request: NextRequest) {
       return obj;
     });
 
+    const branchFilter = await getBranchFilter();
     const students = await db.student.findMany({
+      where: branchFilter,
       select: { id: true, name: true, studentNumber: true },
     });
     const nameToId: Record<string, string> = {};
@@ -84,6 +87,7 @@ export async function POST(request: NextRequest) {
 
     let successCount = 0;
     let skipCount = 0;
+    const branchIdForNew = await getBranchIdForNewRecord();
     const errors: any[] = [];
     const importedReceipts: any[] = [];
 
@@ -136,6 +140,7 @@ export async function POST(request: NextRequest) {
             paymentDate,
             paymentMethod: (r.paymentMethod || 'cash').toString().trim(),
             notes: (r.notes || '').toString().trim() || null,
+            branchId: branchIdForNew, // ربط الدفعة بالفرع الحالي
           },
           include: { student: { select: { name: true, studentNumber: true } } },
         });
