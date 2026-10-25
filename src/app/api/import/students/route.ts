@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
-import { getBranchIdForNewRecord } from '@/lib/branch-filter';
+import { getBranchIdForNewRecord, getBranchFilter } from '@/lib/branch-filter';
+import { DuplicateNameTracker } from '@/lib/name-match';
 import * as XLSX from 'xlsx';
 
 /**
  * POST /api/import/students
  * استيراد الطلاب من ملف Excel
+ *
+ * الميزات:
+ * - اكتشاف التكرار التام (case-insensitive, trimmed)
+ * - اكتشاف التطابق التقريبي (Levenshtein) للأسماء المتقاربة
+ * - تطبيع الحروف العربية (إزالة التشكيل، توحيد الهمزات)
+ * - خيار التحديث بدلاً من الإضافة عند التكرار
  *
  * Columns expected (any order, header names matched):
  * - name * (الاسم واللقب)
@@ -30,6 +37,11 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: 'لم يتم رفع أي ملف' }, { status: 400 });
     }
+
+    // استخرج خيار "تجاوز المكررات" أو "تحديث الموجود" من query params
+    const url = new URL(request.url);
+    const skipDuplicates = url.searchParams.get('skipDuplicates') !== 'false'; // default true
+    const updateExisting = url.searchParams.get('updateExisting') === 'true'; // default false
 
     // اقرأ ملف Excel
     const buf = await file.arrayBuffer();
@@ -64,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     // قاموس الأعمدة (يدعم العربية والإنجليزية)
     const colMap: Record<string, string> = {
-      'name': 'name', 'الاسم': 'name', 'الاسم واللقب': 'name', 'name': 'name', 'fullname': 'name',
+      'name': 'name', 'الاسم': 'name', 'الاسم واللقب': 'name', 'fullname': 'name',
       'phone': 'phone', 'الهاتف': 'phone', 'رقم الهاتف': 'phone', 'tel': 'phone', 'mobile': 'phone',
       'gender': 'gender', 'الجنس': 'gender', 'النوع': 'gender',
       'email': 'email', 'البريد': 'email', 'البريد الإلكتروني': 'email',
@@ -90,12 +102,35 @@ export async function POST(request: NextRequest) {
       return obj;
     });
 
-    // جهّز الطلاب للإدراج
+    // ===== اكتشاف التكرارات =====
     const branchId = await getBranchIdForNewRecord();
+    const branchFilter = await getBranchFilter();
+
+    // حمّل كل الطلاب الموجودين لإنشاء tracker
+    const existingStudents = await db.student.findMany({
+      where: branchFilter,
+      select: { id: true, name: true, studentNumber: true, phone: true },
+    });
+    const tracker = new DuplicateNameTracker(0.85);
+    // خريطات سريعة للرقم الجامعي والهاتف
+    const numToId: Record<string, string> = {};
+    const phoneToId: Record<string, string> = {};
+    for (const s of existingStudents) {
+      tracker.add(s.name, s.id);
+      if (s.studentNumber) numToId[s.studentNumber.toLowerCase().trim()] = s.id;
+      if (s.phone) phoneToId[s.phone.trim()] = s.id;
+    }
+
     const toInsert: any[] = [];
+    const toUpdate: { id: string; data: any }[] = [];
     const errors: any[] = [];
+    const duplicates: any[] = []; // سجل المكررات للإبلاغ
     let successCount = 0;
     let skipCount = 0;
+    let updateCount = 0;
+
+    // تابع للأسماء الجديدة المضافة في نفس الدفعة (لاكتشاف التكرار داخل الملف نفسه)
+    const inBatchTracker = new DuplicateNameTracker(0.85);
 
     for (let i = 0; i < normalizedRows.length; i++) {
       const r = normalizedRows[i];
@@ -105,6 +140,89 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // تحقق من التكرار داخل الملف نفسه (مثلاً: اسم مكرر في صفين)
+      const inBatchMatch = inBatchTracker.findMatch(name);
+      if (inBatchMatch) {
+        duplicates.push({
+          row: i + 2,
+          name,
+          type: 'in-file',
+          matchedWith: inBatchMatch.matchedName,
+          similarity: inBatchMatch.similarity,
+          action: 'skipped',
+        });
+        skipCount++;
+        continue;
+      }
+
+      // تحقق من التكرار مع قاعدة البيانات
+      const dbMatch = tracker.findMatch(name);
+      // تحقق أيضاً بالرقم الجامعي والهاتف
+      const studentNumber = (r.studentNumber || '').toString().trim();
+      const phone = (r.phone || '').toString().trim();
+      const numMatch = studentNumber ? numToId[studentNumber.toLowerCase()] : null;
+      const phoneMatch = phone ? phoneToId[phone] : null;
+
+      const existingId = dbMatch?.id || numMatch || phoneMatch;
+
+      if (existingId) {
+        // مكرر — سجّله
+        duplicates.push({
+          row: i + 2,
+          name,
+          type: dbMatch ? 'similar-name' : numMatch ? 'same-number' : 'same-phone',
+          matchedWith: dbMatch?.matchedName || studentNumber || phone,
+          similarity: dbMatch?.similarity,
+          action: updateExisting ? 'updated' : 'skipped',
+        });
+
+        if (updateExisting) {
+          // حدّث الطالب الموجود بالبيانات الجديدة
+          const deptName = (r.department || '').toString().trim();
+          const deptId = deptName ? deptMap[deptName.toLowerCase()] : undefined;
+          const levelName = (r.level || '').toString().trim();
+          const levelId = levelName ? levelMap[levelName.toLowerCase()] : undefined;
+          const specName = (r.specialization || '').toString().trim();
+          const specId = specName ? specMap[specName.toLowerCase()] : undefined;
+
+          let birthDate: Date | null = null;
+          if (r.birthDate) {
+            try {
+              birthDate = new Date(r.birthDate);
+              if (isNaN(birthDate.getTime())) birthDate = null;
+            } catch {}
+          }
+
+          const status = (r.status || 'registered').toString().trim();
+          const validStatuses = ['registered', 'continuing', 'abandoned', 'postponed', 'graduated'];
+          const finalStatus = validStatuses.includes(status) ? status : 'registered';
+
+          toUpdate.push({
+            id: existingId,
+            data: {
+              phone: phone || undefined,
+              gender: (r.gender || '').toString().trim() || undefined,
+              email: (r.email || '').toString().trim() || undefined,
+              departmentId: deptId,
+              levelId,
+              specializationId: specId,
+              studentNumber: studentNumber || undefined,
+              birthDate: birthDate || undefined,
+              address: (r.address || '').toString().trim() || undefined,
+              status: finalStatus,
+            },
+          });
+          updateCount++;
+        } else {
+          skipCount++;
+        }
+
+        // أضِف لقائمة المتابعة الداخلية (لتجنب تكرار داخل الملف)
+        inBatchTracker.add(name, existingId);
+        continue;
+      }
+
+      // ليس مكرر — جهّزه للإدراج
       const deptName = (r.department || '').toString().trim();
       const deptId = deptName ? deptMap[deptName.toLowerCase()] : null;
 
@@ -126,31 +244,51 @@ export async function POST(request: NextRequest) {
       const validStatuses = ['registered', 'continuing', 'abandoned', 'postponed', 'graduated'];
       const finalStatus = validStatuses.includes(status) ? status : 'registered';
 
-      toInsert.push({
+      const newStudent = {
         name,
-        phone: (r.phone || '').toString().trim() || null,
+        phone: phone || null,
         gender: (r.gender || '').toString().trim() || null,
         email: (r.email || '').toString().trim() || null,
         departmentId: deptId,
-        levelId: levelId,
+        levelId,
         specializationId: specId,
-        studentNumber: (r.studentNumber || '').toString().trim() || null,
+        studentNumber: studentNumber || null,
         birthDate,
         address: (r.address || '').toString().trim() || null,
         status: finalStatus,
         registrationDate: new Date(),
-        branchId, // ربط الطالب بالفرع الحالي للمستخدم
-      });
+        branchId,
+      };
+      toInsert.push(newStudent);
+      // أضِف لقائمة المتابعة الداخلية
+      // (mعرف fake مؤقتاً — سيُحدّث بالـ id الحقيقي بعد الإدراج)
+      inBatchTracker.add(name, `pending-${i}`);
     }
 
-    // أدرج الطلاب
+    // أدرج الطلاب الجدد
     for (let i = 0; i < toInsert.length; i++) {
       try {
-        await db.student.create({ data: toInsert[i] });
+        const created = await db.student.create({ data: toInsert[i] });
         successCount++;
+        // حدّث tracker بالـ id الحقيقي (في حال تكرار لاحق)
+        tracker.add(toInsert[i].name, created.id);
       } catch (e: any) {
         errors.push({ row: i + 2, name: toInsert[i].name, error: e.message });
         skipCount++;
+      }
+    }
+
+    // حدّث الطلاب الموجودين (إذا تفعّل updateExisting)
+    for (const upd of toUpdate) {
+      try {
+        // أزِل undefined values
+        const cleanData: any = {};
+        for (const [k, v] of Object.entries(upd.data)) {
+          if (v !== undefined) cleanData[k] = v;
+        }
+        await db.student.update({ where: { id: upd.id }, data: cleanData });
+      } catch (e: any) {
+        errors.push({ id: upd.id, error: e.message });
       }
     }
 
@@ -158,9 +296,15 @@ export async function POST(request: NextRequest) {
       ok: true,
       total: rows.length,
       success: successCount,
+      updated: updateCount,
       skipped: skipCount,
-      errors: errors.slice(0, 50), // أول 50 خطأ فقط
+      duplicatesCount: duplicates.length,
+      duplicates: duplicates.slice(0, 50), // أول 50 مكرر للعرض
+      errors: errors.slice(0, 50),
       errorsCount: errors.length,
+      message: duplicates.length > 0
+        ? `تم استيراد ${successCount} طالب جديد، تجاوز ${skipCount} مكرر، ${updateCount} محدّث`
+        : `تم استيراد ${successCount} طالب بنجاح`,
     });
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {

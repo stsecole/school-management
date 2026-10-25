@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
+import { DuplicateNameTracker } from '@/lib/name-match';
 import * as XLSX from 'xlsx';
 
 /**
  * POST /api/import/payments
  * استيراد دفعات الطلاب من Excel
+ *
+ * الميزات الجديدة:
+ * - اكتشاف الأسماء المتقاربة عند مطابقة الطالب (لا حاجة لتطابق تام)
+ * - منع تكرار نفس الدفعة (نفس الطالب + نفس المبلغ + نفس التاريخ)
  *
  * Columns:
  * - studentName * أو studentNumber * (تحديد الطالب)
@@ -16,6 +21,7 @@ import * as XLSX from 'xlsx';
  * - paymentLabel (تسجيل/قسط أول/...)
  * - paymentMethod (cash/transfer/cheque)
  * - notes (ملاحظات)
+ * - receiptNumber (رقم الوصل)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +32,10 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: 'لم يتم رفع أي ملف' }, { status: 400 });
     }
+
+    // استخرج خيار "تخطي الدفعات المكررة"
+    const url = new URL(request.url);
+    const skipDuplicatePayments = url.searchParams.get('skipDuplicates') !== 'false'; // default true
 
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
@@ -69,44 +79,80 @@ export async function POST(request: NextRequest) {
       where: branchFilter,
       select: { id: true, name: true, studentNumber: true },
     });
-    const nameToId: Record<string, string> = {};
+
+    // استخدم DuplicateNameTracker لمطابقة الأسماء المتقاربة
+    const tracker = new DuplicateNameTracker(0.80); // 80% للتطابق التقريبي في الأسماء
     const numToId: Record<string, string> = {};
     for (const s of students) {
-      if (s.name) nameToId[s.name.toLowerCase().trim()] = s.id;
+      tracker.add(s.name, s.id);
       if (s.studentNumber) numToId[s.studentNumber.toLowerCase().trim()] = s.id;
     }
 
-    // آخر receiptNumber
-    const lastPayment = await db.studentPayment.findFirst({
-      orderBy: { receiptNumber: 'desc' },
-      select: { receiptNumber: true },
+    // حمّل الدفعات الموجودة لاكتشاف تكرار نفس الدفعة
+    const existingPayments = await db.studentPayment.findMany({
+      where: branchFilter,
+      select: { id: true, studentId: true, amount: true, paymentDate: true, receiptNumber: true },
     });
+    // مفتاح مركّب: studentId + amount + date (بالأيام)
+    const existingPaymentKeys = new Set<string>();
+    for (const p of existingPayments) {
+      const dateKey = new Date(p.paymentDate).toISOString().split('T')[0];
+      existingPaymentKeys.add(`${p.studentId}|${p.amount}|${dateKey}`);
+    }
+    // مفتاح رقم الوصل
+    const existingReceiptNumbers = new Set(existingPayments.map(p => p.receiptNumber));
+
+    // آخر receiptNumber
     let receiptCounter = 0;
-    if (lastPayment?.receiptNumber) {
-      const match = lastPayment.receiptNumber.match(/(\d+)$/);
+    const lastPayment = existingPayments
+      .map(p => p.receiptNumber)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    if (lastPayment) {
+      const match = lastPayment.match(/(\d+)$/);
       if (match) receiptCounter = parseInt(match[1]);
     }
 
     let successCount = 0;
     let skipCount = 0;
+    let duplicatePaymentCount = 0;
     const branchIdForNew = await getBranchIdForNewRecord();
     const errors: any[] = [];
+    const duplicates: any[] = [];
 
     for (let i = 0; i < normalizedRows.length; i++) {
       const r = normalizedRows[i];
       const studentName = (r.studentName || '').toString().trim();
       const studentNumber = (r.studentNumber || '').toString().trim();
 
-      // ابحث عن الطالب
+      // ابحث عن الطالب — بـ studentNumber أولاً، ثم بالاسم المتقارب
       let studentId: string | null = null;
+      let matchType = '';
+      let matchedName = '';
+
       if (studentNumber) {
         studentId = numToId[studentNumber.toLowerCase()] || null;
+        if (studentId) {
+          matchType = 'exact-number';
+          matchedName = studentNumber;
+        }
       }
       if (!studentId && studentName) {
-        studentId = nameToId[studentName.toLowerCase()] || null;
+        // استخدم tracker لمطابقة الأسماء المتقاربة
+        const match = tracker.findMatch(studentName);
+        if (match) {
+          studentId = match.id;
+          matchType = match.similarity >= 0.99 ? 'exact-name' : 'similar-name';
+          matchedName = match.matchedName;
+        }
       }
       if (!studentId) {
-        errors.push({ row: i + 2, error: `الطالب غير موجود: ${studentName || studentNumber}` });
+        errors.push({
+          row: i + 2,
+          error: `الطالب غير موجود: ${studentName || studentNumber}`,
+          suggestion: 'تأكد من كتابة الاسم بشكل صحيح أو أضف الطالب أولاً',
+        });
         skipCount++;
         continue;
       }
@@ -126,14 +172,35 @@ export async function POST(request: NextRequest) {
         } catch {}
       }
 
-      const paymentType = (r.paymentType || 'installment').toString().trim();
-      const validTypes = ['registration', 'installment', 'full'];
-      const finalType = validTypes.includes(paymentType) ? paymentType : 'installment';
+      // تحقق من تكرار نفس الدفعة (نفس الطالب + نفس المبلغ + نفس التاريخ)
+      const dateKey = paymentDate.toISOString().split('T')[0];
+      const paymentKey = `${studentId}|${amount}|${dateKey}`;
+
+      if (skipDuplicatePayments && existingPaymentKeys.has(paymentKey)) {
+        duplicatePaymentCount++;
+        duplicates.push({
+          row: i + 2,
+          studentName,
+          matchedName,
+          matchType,
+          amount,
+          date: dateKey,
+          action: 'skipped-duplicate-payment',
+        });
+        skipCount++;
+        continue;
+      }
 
       receiptCounter++;
-      const receiptNumber = r.receiptNumber
+      let receiptNumber = r.receiptNumber
         ? r.receiptNumber.toString().trim()
         : `W-${new Date().getFullYear()}-${String(receiptCounter).padStart(4, '0')}`;
+
+      // تحقق من تكرار رقم الوصل
+      if (existingReceiptNumbers.has(receiptNumber)) {
+        // ولّد رقم جديد تلقائياً
+        receiptNumber = `W-${new Date().getFullYear()}-${String(receiptCounter).padStart(4, '0')}`;
+      }
 
       try {
         await db.studentPayment.create({
@@ -141,15 +208,18 @@ export async function POST(request: NextRequest) {
             receiptNumber,
             studentId,
             amount,
-            paymentType: finalType,
+            paymentType: (r.paymentType || 'installment').toString().trim(),
             paymentLabel: (r.paymentLabel || '').toString().trim() || null,
             paymentDate,
             paymentMethod: (r.paymentMethod || 'cash').toString().trim(),
             notes: (r.notes || '').toString().trim() || null,
-            branchId: branchIdForNew, // ربط الدفعة بالفرع الحالي
+            branchId: branchIdForNew,
           },
         });
         successCount++;
+        // أضِف للمجموعات لتجنب التكرار داخل نفس الملف
+        existingPaymentKeys.add(paymentKey);
+        existingReceiptNumbers.add(receiptNumber);
       } catch (e: any) {
         errors.push({ row: i + 2, error: e.message });
         skipCount++;
@@ -161,8 +231,11 @@ export async function POST(request: NextRequest) {
       total: rows.length,
       success: successCount,
       skipped: skipCount,
+      duplicatePayments: duplicatePaymentCount,
+      duplicates: duplicates.slice(0, 50),
       errors: errors.slice(0, 50),
       errorsCount: errors.length,
+      message: `تم استيراد ${successCount} دفعة، تخطّي ${skipCount} (${duplicatePaymentCount} مكررة)`,
     });
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
