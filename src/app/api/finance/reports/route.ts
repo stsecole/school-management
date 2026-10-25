@@ -50,14 +50,14 @@ export async function GET(request: NextRequest) {
       orderBy: { paymentDate: 'desc' },
     });
 
-    // ===== Teacher payments (مفلترة بالفرع) =====
-    const teacherPaymentWhere: any = { ...branchFilter };
+    // ===== Teacher payments (مفلترة بالفرع عبر علاقة teacher) =====
+    // ملاحظة: TeacherPayment ليس به حقل branchId مباشر — الفرع على Teacher
+    const teacherPaymentWhere: any = {};
     if (month) teacherPaymentWhere.month = month;
-    if (departmentId) {
-      teacherPaymentWhere.teacher = { ...branchFilter, departmentId };
-    } else {
-      teacherPaymentWhere.teacher = { ...branchFilter };
-    }
+    // الفلترة بالفرع تتم عبر علاقة teacher
+    const teacherFilter: any = { ...branchFilter };
+    if (departmentId) teacherFilter.departmentId = departmentId;
+    teacherPaymentWhere.teacher = teacherFilter;
 
     const teacherPayments = await db.teacherPayment.findMany({
       where: teacherPaymentWhere,
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
 
     // ===== All-time totals (مفلترة بالفرع) =====
     const allStudentPayments = await db.studentPayment.findMany({ where: branchFilter });
-    const allTeacherPayments = await db.teacherPayment.findMany({ where: branchFilter });
+    const allTeacherPayments = await db.teacherPayment.findMany({ where: { teacher: { ...branchFilter } } });
     const allExpenses = await db.expense.findMany({ where: branchFilter });
     const totalIncomeAll = allStudentPayments
       .filter(p => !p.isCancelled && !p.isReversed)

@@ -14,9 +14,13 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month');
 
     const branchFilter = await getBranchFilter();
-    const where: any = { ...branchFilter };
-    if (teacherId) where.teacherId = teacherId;
+    // ملاحظة: TeacherPayment ليس به branchId مباشر — الفرع على Teacher
+    const teacherFilter: any = { ...branchFilter };
+    if (teacherId) teacherFilter.id = teacherId;
+
+    const where: any = {};
     if (month) where.month = month;
+    where.teacher = teacherFilter;
     if (search) {
       where.OR = [
         { receiptNumber: { contains: search } },
