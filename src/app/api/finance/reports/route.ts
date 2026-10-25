@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
     // ===== Teacher totals (مفلترة بالفرع) =====
     const teachers = await db.teacher.findMany({
       where: branchFilter,
-      include: { payments: { where: branchFilter } },
+      include: { payments: true },
     });
     const teacherTotals = teachers.map(t => {
       const paid = t.payments.reduce((sum, p) => sum + p.amount, 0);
