@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
-import { getBranchIdForNewRecord } from '@/lib/branch-filter';
+import { getBranchIdForNewRecord, getBranchFilter } from '@/lib/branch-filter';
 
 // GET /api/finance/teacher-payments - director only
 export async function GET(request: NextRequest) {
@@ -13,13 +13,14 @@ export async function GET(request: NextRequest) {
     const teacherId = searchParams.get('teacherId');
     const month = searchParams.get('month');
 
-    const where: any = {};
+    const branchFilter = await getBranchFilter();
+    const where: any = { ...branchFilter };
     if (teacherId) where.teacherId = teacherId;
     if (month) where.month = month;
     if (search) {
       where.OR = [
         { receiptNumber: { contains: search } },
-        { teacher: { name: { contains: search } } },
+        { teacher: { ...branchFilter, name: { contains: search } } },
       ];
     }
 
@@ -29,10 +30,7 @@ export async function GET(request: NextRequest) {
       orderBy: { paymentDate: 'desc' },
     });
 
-    // استثني الوصولات المشطوبة من المجموع
-    const total = payments
-      .filter((p: any) => !p.isCancelled)
-      .reduce((sum, p) => sum + p.amount, 0);
+    const total = payments.reduce((sum, p) => sum + p.amount, 0);
     return NextResponse.json({ payments, total });
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
