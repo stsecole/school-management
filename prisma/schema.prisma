@@ -244,10 +244,27 @@ model InstallmentPlan {
   updatedAt       DateTime @updatedAt
   student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   payments        StudentPayment[] @relation("PaymentToInstallment")
+  allocations     PaymentAllocation[]
 
   @@index([studentId, status])
   @@index([expectedDate])
   @@index([status, isOverdue])
+}
+
+// ===== توزيع المدفوعات (Payment Allocations) =====
+// يتبع كيفية توزيع كل دفعة على الأقساط (دفعة واحدة قد تُوزّع على عدة أقساط)
+model PaymentAllocation {
+  id            String   @id @default(cuid())
+  paymentId     String
+  installmentId String
+  amount        Float    // المبلغ المخصص لهذا القسط
+  createdAt     DateTime @default(now())
+
+  payment       StudentPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installment   InstallmentPlan @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([installmentId])
 }
 
 // ===== التسجيلات في الدورات =====
@@ -347,6 +364,7 @@ model StudentPayment {
   isReversed    Boolean  @default(false) // هل تم عكس الدفعة
   reversedAt    DateTime? // تاريخ العكس
   reversedBy    String?  // اسم الموظف الذي عكسها
+  reversalReason String? // سبب العكس (مثل "تعديل يدوي لجدول الأقساط")
   // ===== حقول إضافية للنظام =====
   receivedBy    String?  // معرّف المستخدم الذي استلم الدفعة
   receivedByName String? // اسم المستخدم الذي استلم الدفعة
@@ -355,6 +373,8 @@ model StudentPayment {
   student       Student  @relation(fields: [studentId], references: [id])
   installment   InstallmentPlan? @relation("PaymentToInstallment", fields: [installmentId], references: [id])
   branch        Branch?  @relation(fields: [branchId], references: [id])
+  // العلاقة مع جدول توزيع المدفوعات (PaymentAllocation)
+  allocations   PaymentAllocation[]
 
   // ===== Database indexes for performance =====
   @@index([paymentDate, branchId])
