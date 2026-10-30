@@ -10,7 +10,7 @@ import {
   CalendarCheck, ListTodo, Wallet, LogOut, Menu, GraduationCap as School,
   AlertCircle, UserCog, Calendar, Clock, ScanLine, BarChart3, Database, UserPlus,
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
-  Loader2, Search, X, Briefcase,
+  Loader2, Search, X, Briefcase, Target,
 } from 'lucide-react';
 import { LoginScreen } from '@/components/login-screen';
 import { DashboardStats } from '@/components/sections/dashboard-stats';
@@ -50,6 +50,7 @@ const StudentCardsSection = lazy(() => import('@/components/sections/student-car
 const OperationsCenter = lazy(() => import('@/components/sections/operations-center').then(m => ({ default: m.OperationsCenter })));
 const BranchesSection = lazy(() => import('@/components/sections/branches-section').then(m => ({ default: m.BranchesSection })));
 const JobApplicationsSection = lazy(() => import('@/components/sections/job-applications-section').then(m => ({ default: m.JobApplicationsSection })));
+const GoalsSection = lazy(() => import('@/components/sections/goals-section').then(m => ({ default: m.GoalsSection })));
 
 // ===== Loading fallback component =====
 function SectionLoader() {
@@ -71,7 +72,7 @@ interface SessionUser {
   canManageTimetable?: boolean;
 }
 
-type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'job-applications';
+type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'job-applications' | 'goals';
 
 const sections: { id: Section; label: string; icon: any; roles: ('director' | 'employee')[] }[] = [
   { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['director', 'employee'] },
@@ -104,6 +105,7 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'backup', label: 'النسخ الاحتياطي', icon: Database, roles: ['director'] },
   { id: 'ai-settings', label: 'إعدادات AI', icon: Settings, roles: ['director'] },
   { id: 'job-applications', label: 'طلبات العمل', icon: Briefcase, roles: ['director', 'employee'] },
+  { id: 'goals', label: 'الأهداف والأداء', icon: Target, roles: ['director', 'employee'] },
 ];
 
 export default function Home() {
@@ -521,6 +523,9 @@ export default function Home() {
           )}
           {activeSection === 'job-applications' && (
             <Suspense fallback={<SectionLoader />}><JobApplicationsSection /></Suspense>
+          )}
+          {activeSection === 'goals' && (
+            <Suspense fallback={<SectionLoader />}><GoalsSection isDirector={user.role === 'director'} /></Suspense>
           )}
         </div>
       </main>

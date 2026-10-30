@@ -65,6 +65,8 @@ model Branch {
   holidays          Holiday[]
   workSettings      WorkSettings[]
   timetableSessions TimetableSession[]
+  jobApplications   JobApplication[]
+  uploadedFiles     UploadedFile[]
 }
 
 // ===== الأقسام والشعب =====
@@ -242,10 +244,27 @@ model InstallmentPlan {
   updatedAt       DateTime @updatedAt
   student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   payments        StudentPayment[] @relation("PaymentToInstallment")
+  allocations     PaymentAllocation[]
 
   @@index([studentId, status])
   @@index([expectedDate])
   @@index([status, isOverdue])
+}
+
+// ===== توزيع المدفوعات (Payment Allocations) =====
+// يتبع كيفية توزيع كل دفعة على الأقساط (دفعة واحدة قد تُوزّع على عدة أقساط)
+model PaymentAllocation {
+  id            String   @id @default(cuid())
+  paymentId     String
+  installmentId String
+  amount        Float    // المبلغ المخصص لهذا القسط
+  createdAt     DateTime @default(now())
+
+  payment       StudentPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installment   InstallmentPlan @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([installmentId])
 }
 
 // ===== التسجيلات في الدورات =====
@@ -345,6 +364,7 @@ model StudentPayment {
   isReversed    Boolean  @default(false) // هل تم عكس الدفعة
   reversedAt    DateTime? // تاريخ العكس
   reversedBy    String?  // اسم الموظف الذي عكسها
+  reversalReason String? // سبب العكس (مثل "تعديل يدوي لجدول الأقساط")
   // ===== حقول إضافية للنظام =====
   receivedBy    String?  // معرّف المستخدم الذي استلم الدفعة
   receivedByName String? // اسم المستخدم الذي استلم الدفعة
@@ -353,6 +373,8 @@ model StudentPayment {
   student       Student  @relation(fields: [studentId], references: [id])
   installment   InstallmentPlan? @relation("PaymentToInstallment", fields: [installmentId], references: [id])
   branch        Branch?  @relation(fields: [branchId], references: [id])
+  // العلاقة مع جدول توزيع المدفوعات (PaymentAllocation)
+  allocations   PaymentAllocation[]
 
   // ===== Database indexes for performance =====
   @@index([paymentDate, branchId])
@@ -991,4 +1013,46 @@ model StaffPayment {
   @@index([paymentDate])
   @@index([receiptNumber])
   @@index([isCancelled])
+}
+
+// ===== طلبات العمل (Job Applications) =====
+model JobApplication {
+  id          String   @id @default(cuid())
+  name        String   // الاسم واللقب
+  birthDate   DateTime? // تاريخ الميلاد
+  phone       String?  // رقم الهاتف
+  email       String?  // الايميل
+  whatsapp    String?  // الوتس اب
+  diploma     String?  // الدبلوم
+  experience  String?  // الخبرة
+  address     String?  // العنوان
+  note        String?  // ملاحظة
+  cvUrl       String?  // رابط ملف السيرة الذاتية
+  diplomaUrl  String?  // رابط ملف الدبلوم
+  status      String   @default("pending") // pending | reviewed | accepted | rejected
+  branchId    String?  // الفرع
+  appliedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([status])
+  @@index([appliedAt])
+}
+
+// ===== تخزين الملفات في قاعدة البيانات (works on Vercel) =====
+// بدلاً من الكتابة على القرص (read-only على Vercel)، نخزّن الملفات في DB
+model UploadedFile {
+  id         String   @id @default(cuid())
+  content    Bytes    // محتوى الملف (binary)
+  fileName   String   // اسم الملف الأصلي
+  mimeType   String?  // نوع MIME (image/jpeg, application/pdf, ...)
+  size       Int      // حجم الملف بالبايت
+  branchId   String?  // الفرع
+  createdAt  DateTime @default(now())
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([createdAt])
 }

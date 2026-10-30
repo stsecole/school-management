@@ -10,7 +10,7 @@ import {
   CalendarCheck, ListTodo, Wallet, LogOut, Menu, GraduationCap as School,
   AlertCircle, UserCog, Calendar, Clock, ScanLine, BarChart3, Database, UserPlus,
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
-  Loader2, Search, X, Award, Receipt,
+  Loader2, Search, X, Briefcase,
 } from 'lucide-react';
 import { LoginScreen } from '@/components/login-screen';
 import { DashboardStats } from '@/components/sections/dashboard-stats';
@@ -45,12 +45,11 @@ const NotificationsSection = lazy(() => import('@/components/sections/notificati
 const CalendarSection = lazy(() => import('@/components/sections/calendar-section').then(m => ({ default: m.CalendarSection })));
 const PermissionsSection = lazy(() => import('@/components/sections/permissions-section').then(m => ({ default: m.PermissionsSection })));
 const ArchiveSection = lazy(() => import('@/components/sections/archive-section').then(m => ({ default: m.ArchiveSection })));
-const CertificatesSection = lazy(() => import('@/components/sections/certificates-section').then(m => ({ default: m.CertificatesSection })));
 const ActivityLogSection = lazy(() => import('@/components/sections/activity-log-section').then(m => ({ default: m.ActivityLogSection })));
 const StudentCardsSection = lazy(() => import('@/components/sections/student-cards-section').then(m => ({ default: m.StudentCardsSection })));
 const OperationsCenter = lazy(() => import('@/components/sections/operations-center').then(m => ({ default: m.OperationsCenter })));
 const BranchesSection = lazy(() => import('@/components/sections/branches-section').then(m => ({ default: m.BranchesSection })));
-const InstallmentsSection = lazy(() => import('@/components/sections/installments-section').then(m => ({ default: m.InstallmentsSection })));
+const JobApplicationsSection = lazy(() => import('@/components/sections/job-applications-section').then(m => ({ default: m.JobApplicationsSection })));
 
 // ===== Loading fallback component =====
 function SectionLoader() {
@@ -72,7 +71,7 @@ interface SessionUser {
   canManageTimetable?: boolean;
 }
 
-type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'certificates';
+type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'job-applications';
 
 const sections: { id: Section; label: string; icon: any; roles: ('director' | 'employee')[] }[] = [
   { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['director', 'employee'] },
@@ -87,7 +86,6 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'timetable', label: 'الجدول الأسبوعي', icon: Calendar, roles: ['director', 'employee'] },
   { id: 'timesheet', label: 'حضور الموظفين', icon: Clock, roles: ['director', 'employee'] },
   { id: 'finance', label: 'القسم المالي', icon: Wallet, roles: ['director', 'employee'] },
-  { id: 'installments', label: 'الأقساط المالية', icon: Receipt, roles: ['director', 'employee'] },
   { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['director', 'employee'] },
   { id: 'exams', label: 'التقييمات', icon: ClipboardList, roles: ['director', 'employee'] },
   { id: 'crm', label: 'العملاء المحتملون', icon: UserPlus, roles: ['director', 'employee'] },
@@ -97,7 +95,6 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'notifications', label: 'الإشعارات', icon: Bell, roles: ['director', 'employee'] },
   { id: 'student-cards', label: 'بطاقات الهوية', icon: IdCard, roles: ['director', 'employee'] },
   { id: 'archive', label: 'الأرشيف', icon: Archive, roles: ['director', 'employee'] },
-  { id: 'certificates', label: 'سجل الشهادات', icon: Award, roles: ['director', 'employee'] },
   { id: 'ai-assistant', label: 'المساعد الذكي', icon: Sparkles, roles: ['director', 'employee'] },
   { id: 'users', label: 'إدارة الحسابات', icon: UserCog, roles: ['director'] },
   { id: 'branches', label: 'الفروع', icon: Building2, roles: ['director'] },
@@ -106,6 +103,7 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'institution-settings', label: 'إعدادات المؤسسة', icon: Building2, roles: ['director'] },
   { id: 'backup', label: 'النسخ الاحتياطي', icon: Database, roles: ['director'] },
   { id: 'ai-settings', label: 'إعدادات AI', icon: Settings, roles: ['director'] },
+  { id: 'job-applications', label: 'طلبات العمل', icon: Briefcase, roles: ['director', 'employee'] },
 ];
 
 export default function Home() {
@@ -114,34 +112,12 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [allowedSections, setAllowedSections] = useState<string[] | null>(null);
-  const [sectionSearch, setSectionSearch] = useState('');
-  const [notifCount, setNotifCount] = useState(0);
+  const [sectionSearch, setSectionSearch] = useState(''); // شريط البحث السريع في عناصر الواجهة
   const [institution, setInstitution] = useState<{ name: string; tagline: string; logoUrl: string }>({
     name: 'نظام الإدارة',
     tagline: 'مدرسة السلامة',
     logoUrl: '',
   });
-
-  // ===== جلب عدّاد الإشعارات غير المقروءة كل 60 ثانية =====
-  useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        const notifRes = await fetch('/api/notifications?unreadOnly=true');
-        const notifData = await notifRes.json();
-        const notifUnread = notifData.unreadCount || 0;
-        let msgUnread = 0;
-        try {
-          const msgRes = await fetch('/api/messages?type=inbox');
-          const msgData = await msgRes.json();
-          msgUnread = msgData.unreadCount || 0;
-        } catch {}
-        setNotifCount(notifUnread + msgUnread);
-      } catch {}
-    };
-    fetchCounts();
-    const interval = setInterval(fetchCounts, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch institution settings (no auth needed)
   useEffect(() => {
@@ -337,26 +313,12 @@ export default function Home() {
           </div>
           <span className="font-bold truncate">{institution.name}</span>
         </div>
-        <div className="flex items-center gap-1">
-          {/* أيقونة الإشعارات - الجوال */}
-          <button
-            onClick={() => handleSelectSection('notifications')}
-            className="relative p-2 rounded-lg hover:bg-primary-foreground/10 transition-colors"
-            title="الإشعارات"
-          >
-            <Bell className="w-5 h-5" />
-            {notifCount > 0 && (
-              <span className="absolute -top-1 -left-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                {notifCount > 99 ? '99+' : notifCount}
-              </span>
-            )}
-          </button>
-          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10">
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
+        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
           <SheetContent side="right" className="w-72 p-0 bg-primary text-primary-foreground border-l-0">
             <div className="p-5 border-b border-primary-foreground/10">
               <div className="flex items-center gap-3">
@@ -440,30 +402,14 @@ export default function Home() {
             </div>
           </SheetContent>
         </Sheet>
-        </div>
       </div>
 
       {/* Main content */}
       <main className="flex-1 lg:mr-64 pt-16 lg:pt-0">
-        {/* Top bar with global search + notifications + branch selector */}
+        {/* Top bar with global search + branch selector */}
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b px-4 md:px-6 lg:px-8 py-2 flex items-center justify-between gap-2">
           <GlobalSearch onNavigate={(s) => setActiveSection(s as Section)} />
-          <div className="flex items-center gap-2">
-            {/* أيقونة الإشعارات - Desktop */}
-            <button
-              onClick={() => handleSelectSection('notifications')}
-              className="relative p-2 rounded-lg hover:bg-muted transition-colors"
-              title="الإشعارات والرسائل"
-            >
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              {notifCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 animate-pulse">
-                  {notifCount > 99 ? '99+' : notifCount}
-                </span>
-              )}
-            </button>
-            {user.role === 'director' && <BranchSelector />}
-          </div>
+          {user.role === 'director' && <BranchSelector />}
         </div>
         <div className={`max-w-7xl mx-auto animate-fade-in ${
           activeSection === 'ai-assistant' ? 'p-0 h-full' : 'p-4 md:p-6 lg:p-8'
@@ -513,9 +459,6 @@ export default function Home() {
           {activeSection === 'finance' && (
             <Suspense fallback={<SectionLoader />}><FinanceSection user={user} /></Suspense>
           )}
-                    {activeSection === 'installments' && (
-            <Suspense fallback={<SectionLoader />}><InstallmentsSection isDirector={user.role === 'director'} /></Suspense>
-          )}
           {activeSection === 'timetable' && (
             <Suspense fallback={<SectionLoader />}><TimetableSection isDirector={user.role === 'director'} canManageTimetable={user.role === 'director' || user.canManageTimetable} /></Suspense>
           )}
@@ -536,9 +479,6 @@ export default function Home() {
           )}
           {activeSection === 'archive' && (
             <Suspense fallback={<SectionLoader />}><ArchiveSection /></Suspense>
-          )}
-          {activeSection === 'certificates' && (
-            <Suspense fallback={<SectionLoader />}><CertificatesSection /></Suspense>
           )}
           {activeSection === 'activity-log' && (
             <Suspense fallback={<SectionLoader />}><ActivityLogSection isDirector={user.role === 'director'} /></Suspense>
@@ -578,6 +518,9 @@ export default function Home() {
           )}
           {activeSection === 'institution-settings' && (
             <Suspense fallback={<SectionLoader />}><InstitutionSettingsSection /></Suspense>
+          )}
+          {activeSection === 'job-applications' && (
+            <Suspense fallback={<SectionLoader />}><JobApplicationsSection /></Suspense>
           )}
         </div>
       </main>
