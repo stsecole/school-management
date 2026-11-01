@@ -33,7 +33,6 @@ interface Student {
   specialty: string | null;
   college: string | null;
   courseStartDate: string | null;
-  batchMonth: string | null;
   totalAmount: number | null;
   initialPayment: number | null;
   status: string;
@@ -98,7 +97,7 @@ const empty = {
   departmentId: '', levelId: '', specializationId: '',
   section: '', specialty: '', college: '', notes: '',
   status: 'registered', photoUrl: '',
-  birthDate: '', address: '', courseStartDate: '', batchMonth: '',
+  birthDate: '', address: '', courseStartDate: '',
   totalAmount: '', initialPayment: '',
   docPhotos: false, docBirthCert: false, docIdCard: false,
   docTsPhotos: false, docTsBirthCerts: false, docTsIdCards: false,
@@ -239,7 +238,6 @@ export function StudentsSection({ isDirector = false }: { isDirector?: boolean }
       notes: s.notes || '', status: s.status, photoUrl: s.photoUrl || '',
       birthDate: '', address: '',
       courseStartDate: s.courseStartDate ? s.courseStartDate.split('T')[0] : '',
-      batchMonth: (s as any).batchMonth || '',
       totalAmount: s.totalAmount ? String(s.totalAmount) : '',
       initialPayment: s.initialPayment ? String(s.initialPayment) : '',
       docPhotos: s.docPhotos || false,
@@ -868,22 +866,6 @@ export function StudentsSection({ isDirector = false }: { isDirector?: boolean }
                     onChange={(e) => setFormData({ ...formData, courseStartDate: e.target.value })}
                     dir="ltr"
                   />
-                </div>
-                {/* ===== الدفعة (شهر + سنة) ===== */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    <CalendarClock className="w-4 h-4 text-blue-600" />
-                    الدفعة (شهر/سنة)
-                  </Label>
-                  <Input
-                    type="month"
-                    value={formData.batchMonth || ''}
-                    onChange={(e) => setFormData({ ...formData, batchMonth: e.target.value })}
-                    dir="ltr"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    يُستخدم لفلترة التقارير حسب الدفعة
-                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1">
