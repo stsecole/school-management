@@ -125,6 +125,39 @@ export async function POST(request: NextRequest) {
       include: { department: true, level: true, specialization: true },
     });
 
+    // ===== تسجيل الدفعة الأولية كـ StudentPayment لكل الطلاب (وليس فقط أقساط) =====
+    // هذا يضمن أن الدفعة الأولية تظهر في:
+    // - القسم المالي (تقارير المداخيل)
+    // - قائمة دفعات الطالب
+    // - لوحة التحكم المالية
+    if (initialPayment > 0) {
+      const branchIdForPayment = await getBranchIdForNewRecord();
+      const setting = await db.setting.findUnique({ where: { key: 'receipt_counter' } });
+      let counter = setting ? parseInt(setting.value) : 2000;
+      counter++;
+      await db.setting.upsert({
+        where: { key: 'receipt_counter' },
+        update: { value: String(counter) },
+        create: { key: 'receipt_counter', value: String(counter) },
+      });
+
+      await db.studentPayment.create({
+        data: {
+          receiptNumber: `W-${counter}`,
+          studentId: student.id,
+          amount: initialPayment,
+          paymentType: 'registration',
+          paymentLabel: 'دفعة أولية',
+          paymentDate: new Date(),
+          paymentMethod: 'cash',
+          notes: 'الدفعة الأولية عند التسجيل',
+          branchId: branchIdForPayment,
+          receivedBy: user.id,
+          receivedByName: user.name,
+        },
+      });
+    }
+
     // Generate installment plan if department requires it (e.g. التقني سامي = 30 months)
     if (department && department.hasInstallments && department.installmentMonths) {
       const months = department.installmentMonths;
@@ -152,38 +185,13 @@ export async function POST(request: NextRequest) {
       }
       await db.installmentPlan.createMany({ data: installments });
 
-      // If there's an initial payment, record it as a StudentPayment + mark month 1 as paid
+      // If there's an initial payment, mark month 1 as paid
+      // (the StudentPayment record was already created above for ALL students)
       if (initialPayment > 0) {
-        // Generate receipt number for initial payment
-        const setting = await db.setting.findUnique({ where: { key: 'receipt_counter' } });
-        let counter = setting ? parseInt(setting.value) : 2000;
-        counter++;
-        await db.setting.upsert({
-          where: { key: 'receipt_counter' },
-          update: { value: String(counter) },
-          create: { key: 'receipt_counter', value: String(counter) },
-        });
-
-        // Find the first installment to link the payment
         const firstInstallment = await db.installmentPlan.findFirst({
           where: { studentId: student.id, monthNumber: 1 },
         });
 
-        const payment = await db.studentPayment.create({
-          data: {
-            receiptNumber: `W-${counter}`,
-            studentId: student.id,
-            amount: initialPayment,
-            paymentType: 'registration',
-            paymentLabel: 'دفعة أولية',
-            paymentDate: new Date(),
-            paymentMethod: 'cash',
-            installmentId: firstInstallment?.id || null,
-            notes: 'الدفعة الأولية عند التسجيل',
-          },
-        });
-
-        // If first installment exists, mark it as paid (or partial if initial < monthly)
         if (firstInstallment) {
           const newPaidAmount = Math.min(initialPayment, firstInstallment.expectedAmount);
           let newStatus = 'pending';
@@ -214,15 +222,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     }
     console.error('POST /api/students error:', error);
-    const errorMsg = error?.message || error?.toString() || 'حدث خطأ غير معروف';
-    const errorCode = error?.code || '';
-    const errorMeta = error?.meta ? JSON.stringify(error.meta) : '';
-    return NextResponse.json({
-      error: 'حدث خطأ أثناء الإنشاء',
-      details: errorMsg,
-      code: errorCode,
-      meta: errorMeta,
-    }, { status: 500 });
+    return NextResponse.json({ error: 'حدث خطأ أثناء الإنشاء' }, { status: 500 });
   }
 }
 
