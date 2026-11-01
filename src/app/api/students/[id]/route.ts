@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 // GET /api/students/[id]
 export async function GET(
@@ -78,7 +79,6 @@ export async function PUT(
         college: body.college || null,
         specialty: body.specialty || null,
         courseStartDate,
-        batchMonth: body.batchMonth !== undefined ? (body.batchMonth || null) : undefined,
         totalAmount,
         initialPayment,
         status: body.status,
@@ -110,6 +110,59 @@ export async function PUT(
       (totalAmount !== undefined && totalAmount !== existing.totalAmount) ||
       (initialPayment !== undefined && initialPayment !== (existing.initialPayment || 0));
 
+    // ===== معالجة الدفعة الأولية لكل الطلاب (وليس فقط أقساط) =====
+    // عند تغيير initialPayment:
+    // - إذا كان هناك سجل StudentPayment موجود (paymentType='registration'): حدّثه
+    // - إذا لم يوجد: أنشئه بـ branchId
+    // - إذا أصبح initialPayment = 0: احذف سجل الدفعة الأولية
+    if (initialPayment !== undefined && initialPayment !== (existing.initialPayment || 0)) {
+      const existingRegPayment = await db.studentPayment.findFirst({
+        where: { studentId: id, paymentType: 'registration', paymentLabel: 'دفعة أولية' },
+      });
+
+      if (initialPayment > 0) {
+        const branchIdForPayment = existing.branchId || await getBranchIdForNewRecord();
+        if (existingRegPayment) {
+          // حدّث المبلغ الموجود
+          await db.studentPayment.update({
+            where: { id: existingRegPayment.id },
+            data: {
+              amount: initialPayment,
+              branchId: branchIdForPayment,
+            },
+          });
+        } else {
+          // أنشئ سجلاً جديداً
+          const setting = await db.setting.findUnique({ where: { key: 'receipt_counter' } });
+          let counter = setting ? parseInt(setting.value) : 2000;
+          counter++;
+          await db.setting.upsert({
+            where: { key: 'receipt_counter' },
+            update: { value: String(counter) },
+            create: { key: 'receipt_counter', value: String(counter) },
+          });
+          await db.studentPayment.create({
+            data: {
+              receiptNumber: `W-${counter}`,
+              studentId: id,
+              amount: initialPayment,
+              paymentType: 'registration',
+              paymentLabel: 'دفعة أولية',
+              paymentDate: new Date(),
+              paymentMethod: 'cash',
+              notes: 'الدفعة الأولية عند التسجيل',
+              branchId: branchIdForPayment,
+              receivedBy: user.id,
+              receivedByName: user.name,
+            },
+          });
+        }
+      } else if (existingRegPayment && initialPayment === 0) {
+        // initialPayment أصبح 0 — احذف سجل الدفعة الأولية
+        await db.studentPayment.delete({ where: { id: existingRegPayment.id } });
+      }
+    }
+
     if (shouldRegenerate) {
       // Delete existing installments (and unlink payments)
       await db.studentPayment.updateMany({
@@ -122,10 +175,8 @@ export async function PUT(
         const department = await db.department.findUnique({ where: { id: newDepartmentId } });
         if (department && department.hasInstallments && department.installmentMonths) {
           const months = department.installmentMonths;
-          // Get effective total and initial payment
           const effectiveTotalAmount = totalAmount !== undefined ? totalAmount : existing.totalAmount;
           const effectiveInitial = initialPayment !== undefined ? initialPayment : (existing.initialPayment || 0);
-          // Remaining = totalAmount - initialPayment
           const effectiveTotal = (effectiveTotalAmount || 0) - effectiveInitial;
           let monthlyAmount = 0;
           if (effectiveTotal > 0) {
@@ -148,34 +199,23 @@ export async function PUT(
           }
           await db.installmentPlan.createMany({ data: installments });
 
-          // If there's an initial payment, record it as a StudentPayment + mark month 1 as paid
+          // If there's an initial payment, mark month 1 as paid
+          // (StudentPayment record was already created/updated above)
           if (effectiveInitial > 0) {
-            const setting = await db.setting.findUnique({ where: { key: 'receipt_counter' } });
-            let counter = setting ? parseInt(setting.value) : 2000;
-            counter++;
-            await db.setting.upsert({
-              where: { key: 'receipt_counter' },
-              update: { value: String(counter) },
-              create: { key: 'receipt_counter', value: String(counter) },
-            });
-
             const firstInstallment = await db.installmentPlan.findFirst({
               where: { studentId: id, monthNumber: 1 },
             });
 
-            await db.studentPayment.create({
-              data: {
-                receiptNumber: `W-${counter}`,
-                studentId: id,
-                amount: effectiveInitial,
-                paymentType: 'registration',
-                paymentLabel: 'دفعة أولية',
-                paymentDate: new Date(),
-                paymentMethod: 'cash',
-                installmentId: firstInstallment?.id || null,
-                notes: 'الدفعة الأولية عند التسجيل',
-              },
+            // ربط سجل الدفعة الأولية بالقسط الأول
+            const regPayment = await db.studentPayment.findFirst({
+              where: { studentId: id, paymentType: 'registration' },
             });
+            if (regPayment && firstInstallment) {
+              await db.studentPayment.update({
+                where: { id: regPayment.id },
+                data: { installmentId: firstInstallment.id },
+              });
+            }
 
             if (firstInstallment) {
               const newPaidAmount = Math.min(effectiveInitial, firstInstallment.expectedAmount);
