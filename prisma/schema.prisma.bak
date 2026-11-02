@@ -29,6 +29,13 @@ model User {
   updatedAt             DateTime @updatedAt
   timesheets            EmployeeTimesheet[]
   userRole              Role?    @relation(fields: [roleId], references: [id])
+  // ===== العلاقات العكسية لوحدة الأهداف والأداء =====
+  assignedGoals         Goal[]
+  approvedGoals         Goal[]   @relation("ApprovedByUser")
+  goalUpdates           GoalUpdate[] @relation("GoalUpdateAuthor")
+  reviewedGoalUpdates   GoalUpdate[] @relation("GoalUpdateReviewer")
+  goalReviews           GoalReview[]
+  correctiveActions     CorrectiveAction[]
 }
 
 // ===== الفروع (Branches) =====
@@ -67,6 +74,9 @@ model Branch {
   timetableSessions TimetableSession[]
   jobApplications   JobApplication[]
   uploadedFiles     UploadedFile[]
+  // ===== العلاقات العكسية لوحدة الأهداف والأداء =====
+  goalPlans         GoalPlan[]
+  goals             Goal[]
 }
 
 // ===== الأقسام والشعب =====
@@ -88,6 +98,7 @@ model Department {
   groups          Group[]
   subjects        Subject[]
   exams           Exam[]
+  goals           Goal[]
 }
 
 // ===== التخصصات (الشعب) =====
@@ -1055,4 +1066,178 @@ model UploadedFile {
 
   @@index([branchId])
   @@index([createdAt])
+}
+
+// ============================================
+// ===== وحدة الأهداف وإدارة الأداء =====
+// ===== Goals & Performance Management =====
+// ============================================
+
+// ===== خطط الأهداف (Goal Plans) =====
+// خطة سنوية/ربعية/شهرية تجمع عدة أهداف تحت مظلتها
+model GoalPlan {
+  id          String   @id @default(cuid())
+  name        String   // اسم الخطة (مثال: "خطة 2027")
+  description String?
+  periodType  String   @default("annual") // "annual" | "semi-annual" | "quarterly" | "monthly" | "custom"
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("draft") // "draft" | "active" | "archived"
+  branchId    String?  // الفرع (null = المؤسسة ككل)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  goals       Goal[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([periodType])
+  @@index([startDate])
+}
+
+// ===== الأهداف الفردية (Goals) =====
+model Goal {
+  id              String   @id @default(cuid())
+  title           String   // عنوان الهدف
+  description     String?  // الوصف التفصيلي
+  // مستوى الهدف: مؤسسة / فرع / قسم / موظف
+  level           String   @default("employee") // "institution" | "branch" | "department" | "employee"
+  planId          String?  // الخطة المرتبطة (اختياري)
+  parentGoalId    String?  // الهدف الأب للدعم الهرمي للأهداف الفرعية
+  branchId        String?  // الفرع
+  departmentId    String?  // القسم
+  assignedTo      String?  // معرّف المستخدم المسؤول
+  category        String?  // فئة الهدف (أكاديمي، مالي، تشغيلي...)
+  priority        String   @default("medium") // "low" | "medium" | "high" | "critical"
+  weight          Float    @default(0) // وزن الهدف في الخطة (0-100)
+  baseline        Float    @default(0) // القيمة الأساسية (نقطة الانطلاق)
+  target          Float    @default(100) // القيمة المستهدفة
+  actual          Float    @default(0) // القيمة الفعلية الحالية
+  unit            String   @default("percentage") // "count" | "percentage" | "currency" | "hours" | "courses" | "boolean"
+  direction       String   @default("higher-is-better") // "higher-is-better" | "lower-is-better"
+  progressMethod  String   @default("formula") // "formula" | "milestones" | "manual"
+  dataSource      String   @default("manual") // "manual" | "auto"
+  autoMetric      String?  // معرّف تلقائي للحساب (مثل: "total_students")
+  startDate       DateTime?
+  dueDate         DateTime?
+  status          String   @default("draft") // "draft" | "pending-approval" | "active" | "on-hold" | "completed" | "cancelled" | "overdue"
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  approvedById    String?  // المستخدم الذي اعتمد الهدف
+  approvedAt      DateTime?
+
+  // ===== العلاقات =====
+  plan            GoalPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
+  parentGoal      Goal?           @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  subGoals        Goal[]          @relation("GoalHierarchy")
+  branch          Branch?         @relation(fields: [branchId], references: [id])
+  department      Department?     @relation(fields: [departmentId], references: [id])
+  assignedToUser  User?           @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+  approvedBy      User?           @relation("ApprovedByUser", fields: [approvedById], references: [id], onDelete: SetNull)
+  milestones      GoalMilestone[]
+  updates         GoalUpdate[]
+  reviews         GoalReview[]
+  correctiveActions CorrectiveAction[]
+
+  // ===== فهارس الأداء =====
+  @@index([branchId])
+  @@index([departmentId])
+  @@index([assignedTo])
+  @@index([planId])
+  @@index([parentGoalId])
+  @@index([status])
+  @@index([level])
+  @@index([priority])
+  @@index([dueDate])
+}
+
+// ===== المعالم/المهام الفرعية للأهداف (Milestones) =====
+model GoalMilestone {
+  id          String    @id @default(cuid())
+  goalId      String
+  title       String
+  description String?
+  weight      Float     @default(0) // وزن المعلم في إجمالي الهدف (0-100)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([completed])
+}
+
+// ===== تحديثات التقدم (Progress Updates) =====
+model GoalUpdate {
+  id            String    @id @default(cuid())
+  goalId        String
+  userId        String    // المستخدم الذي قام بالتحديث
+  actualValue   Float     @default(0) // القيمة الجديدة الفعلية
+  previousValue Float     @default(0) // القيمة السابقة
+  notes         String?   // ملاحظات التحديث
+  evidenceUrl   String?   // رابط دليل/إثبات
+  status        String    @default("submitted") // "draft" | "submitted" | "approved" | "rejected"
+  submittedAt   DateTime  @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewNotes   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  goal          Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user          User      @relation("GoalUpdateAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy    User?     @relation("GoalUpdateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([userId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+// ===== المراجعات الدورية (Reviews) =====
+model GoalReview {
+  id           String   @id @default(cuid())
+  goalId       String
+  reviewerId   String   // المستخدم الذي قام بالمراجعة
+  reviewType   String   @default("self") // "self" | "manager" | "final"
+  period       String?  // الفترة المراجعة (مثال: "2027-Q1")
+  rating       Float    @default(0) // التقييم (0-5 أو 0-100)
+  achievements String?  // الإنجازات
+  challenges   String?  // التحديات
+  nextSteps    String?  // الخطوات القادمة
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  goal         Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  reviewer     User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([reviewerId])
+  @@index([reviewType])
+  @@index([createdAt])
+}
+
+// ===== الإجراءات التصحيحية (Corrective Actions) =====
+// للأهداف المتعثرة لإطلاق خطة تصحيحية
+model CorrectiveAction {
+  id          String    @id @default(cuid())
+  goalId      String
+  description String    // وصف الإجراء
+  rootCause   String?   // السبب الجذري للمشكلة
+  action      String?   // الإجراء المطلوب اتخاذه
+  assignedTo  String?   // المستخدم المسؤول عن الإجراء
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String    @default("open") // "open" | "in-progress" | "completed"
+  result      String?   // النتيجة بعد التنفيذ
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  assignee    User?     @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([dueDate])
 }

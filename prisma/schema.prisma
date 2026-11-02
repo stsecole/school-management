@@ -74,6 +74,7 @@ model Branch {
   timetableSessions TimetableSession[]
   jobApplications   JobApplication[]
   uploadedFiles     UploadedFile[]
+  otherIncomes      OtherIncome[]
   // ===== العلاقات العكسية لوحدة الأهداف والأداء =====
   goalPlans         GoalPlan[]
   goals             Goal[]
@@ -1240,4 +1241,27 @@ model CorrectiveAction {
   @@index([assignedTo])
   @@index([status])
   @@index([dueDate])
+}
+
+// ===== مداخيل أخرى (Other Income) =====
+// إيجار القاعات، دورات خارجية، وغيرها من المداخيل غير المرتبطة بالطلاب
+model OtherIncome {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل
+  source        String   // مصدر المدخل: "إيجار قاعات" | "دورات خارجية" | "تبرعات" | "أخرى"
+  description   String?  // وصف/ملاحظات
+  amount        Float    // المبلغ
+  date          DateTime // تاريخ المدخل
+  branchId      String?  // الفرع
+  // ===== حقول الشطب =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([date, branchId])
+  @@index([source])
+  @@index([isCancelled])
 }

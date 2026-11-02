@@ -89,6 +89,17 @@ export async function GET(request: NextRequest) {
         .reduce((s: number, p: any) => s + p.amount, 0);
     } catch {}
 
+    // ===== Other Income (مداخيل أخرى — إيجار قاعات، دورات خارجية، إلخ) =====
+    const otherIncomeWhere: any = { ...branchFilter };
+    if (dateRange) otherIncomeWhere.date = dateRange;
+    const otherIncomes = await db.otherIncome.findMany({
+      where: otherIncomeWhere,
+      orderBy: { date: 'desc' },
+    });
+    const totalOtherIncome = otherIncomes
+      .filter(i => !i.isCancelled)
+      .reduce((s, i) => s + i.amount, 0);
+
     // ===== Totals =====
     const totalIncome = studentPayments
       .filter(p => !p.isCancelled && !p.isReversed)
@@ -100,7 +111,8 @@ export async function GET(request: NextRequest) {
       .filter(e => !e.isCancelled)
       .reduce((sum, e) => sum + e.amount, 0);
     const totalExpense = totalTeacherExpense + totalSecondaryExpense + totalStaffExpense;
-    const balance = totalIncome - totalExpense;
+    const totalIncomeAll_sources = totalIncome + totalOtherIncome;
+    const balance = totalIncomeAll_sources - totalExpense;
 
     // ===== Grouping =====
     let grouped: any = null;
@@ -224,7 +236,10 @@ export async function GET(request: NextRequest) {
       studentPayments,
       teacherPayments,
       expenses,
+      otherIncomes,
       totalIncome,
+      totalOtherIncome,
+      totalIncomeAll_sources,
       totalTeacherExpense,
       totalSecondaryExpense,
       totalStaffExpense,
