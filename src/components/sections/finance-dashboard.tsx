@@ -126,14 +126,23 @@ function OverviewTab() {
   return (
     <div className="space-y-4">
       {/* All-time totals */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="border-emerald-200 bg-emerald-50/50">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-muted-foreground">إجمالي المداخيل</span>
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
+              <span className="text-sm text-muted-foreground">مداخيل الطلاب</span>
+              <Users className="w-5 h-5 text-emerald-600" />
             </div>
-            <p className="text-2xl font-bold text-emerald-700 num">{currency(report.allTime.totalIncome)}</p>
+            <p className="text-2xl font-bold text-emerald-700 num">{currency(report.allTime.totalStudentIncome || report.allTime.totalIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-teal-200 bg-teal-50/50">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">مداخيل أخرى</span>
+              <TrendingUp className="w-5 h-5 text-teal-600" />
+            </div>
+            <p className="text-2xl font-bold text-teal-700 num">{currency(report.allTime.totalOtherIncome || 0)}</p>
           </CardContent>
         </Card>
         <Card className="border-red-200 bg-red-50/50">
@@ -162,6 +171,9 @@ function OverviewTab() {
             </div>
             <p className={`text-2xl font-bold num ${report.allTime.balance >= 0 ? 'text-primary' : 'text-red-700'}`}>
               {currency(report.allTime.balance)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              إجمالي المداخيل: <span className="num font-medium text-emerald-600">{currency(report.allTime.totalIncome)}</span>
             </p>
           </CardContent>
         </Card>

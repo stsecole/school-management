@@ -177,9 +177,19 @@ export async function GET(request: NextRequest) {
     const allStudentPayments = await db.studentPayment.findMany({ where: branchFilter });
     const allTeacherPayments = await db.teacherPayment.findMany({ where: { teacher: { ...branchFilter } } });
     const allExpenses = await db.expense.findMany({ where: branchFilter });
+    // All-time other income (مداخيل أخرى)
+    let allOtherIncomes: any[] = [];
+    try {
+      allOtherIncomes = await db.otherIncome.findMany({ where: branchFilter });
+    } catch {}
+    const totalOtherIncomeAll = allOtherIncomes
+      .filter((i: any) => !i.isCancelled)
+      .reduce((s: number, i: any) => s + i.amount, 0);
+
     const totalIncomeAll = allStudentPayments
       .filter(p => !p.isCancelled && !p.isReversed)
       .reduce((s, p) => s + p.amount, 0);
+    const totalIncomeAllWithOther = totalIncomeAll + totalOtherIncomeAll;
     const totalTeacherExpenseAll = allTeacherPayments
       .filter(p => !p.isCancelled)
       .reduce((s, p) => s + p.amount, 0);
@@ -248,12 +258,14 @@ export async function GET(request: NextRequest) {
       expensesByType,
       grouped,
       allTime: {
-        totalIncome: totalIncomeAll,
+        totalIncome: totalIncomeAllWithOther,
+        totalStudentIncome: totalIncomeAll,
+        totalOtherIncome: totalOtherIncomeAll,
         totalTeacherExpense: totalTeacherExpenseAll,
         totalSecondaryExpense: totalSecondaryExpenseAll,
         totalStaffExpense: totalStaffExpenseAll,
         totalExpense: totalTeacherExpenseAll + totalSecondaryExpenseAll + totalStaffExpenseAll,
-        balance: totalIncomeAll - totalTeacherExpenseAll - totalSecondaryExpenseAll - totalStaffExpenseAll,
+        balance: totalIncomeAllWithOther - totalTeacherExpenseAll - totalSecondaryExpenseAll - totalStaffExpenseAll,
       },
       outstanding,
       teacherTotals,
