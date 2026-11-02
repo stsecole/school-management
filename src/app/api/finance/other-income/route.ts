@@ -1,271 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireDirector } from '@/lib/auth';
-import { getBranchFilter } from '@/lib/branch-filter';
+import { requireAuth } from '@/lib/auth';
 
-// GET /api/finance/reports - customizable financial reports (director only)
-// الآن يدعم فلترة الفرع: كل فرع يرى إحصائياته المالية فقط
-export async function GET(request: NextRequest) {
+// PUT /api/finance/other-income/[id]
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    await requireDirector();
+    const user = await requireAuth();
+    const { id } = await params;
+    const body = await request.json();
 
-    const { searchParams } = new URL(request.url);
-    const month = searchParams.get('month');
-    const departmentId = searchParams.get('departmentId');
-    const specializationId = searchParams.get('specializationId');
-    const studentId = searchParams.get('studentId');
-    const groupBy = searchParams.get('groupBy') || 'none';
+    const existing = await db.otherIncome.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
 
-    // ===== فلتر الفرع =====
-    const branchFilter = await getBranchFilter();
-
-    // Build date range for month filter
-    let dateRange: any = null;
-    if (month) {
-      const start = new Date(month + '-01');
-      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-      dateRange = { gte: start, lt: end };
+    const data: any = {};
+    if (body.source !== undefined) data.source = body.source;
+    if (body.description !== undefined) data.description = body.description || null;
+    if (body.amount !== undefined) {
+      const amount = parseFloat(body.amount);
+      if (isNaN(amount) || amount <= 0) return NextResponse.json({ error: 'المبلغ غير صالح' }, { status: 400 });
+      data.amount = amount;
     }
+    if (body.date !== undefined) data.date = body.date ? new Date(body.date) : new Date();
 
-    // ===== Student payments (مفلترة بالفرع) =====
-    const studentPaymentWhere: any = { ...branchFilter };
-    if (dateRange) studentPaymentWhere.paymentDate = dateRange;
-    if (studentId) studentPaymentWhere.studentId = studentId;
-    if (departmentId || specializationId) {
-      studentPaymentWhere.student = {};
-      if (departmentId) studentPaymentWhere.student.departmentId = departmentId;
-      if (specializationId) studentPaymentWhere.student.specializationId = specializationId;
-    }
+    const updated = await db.otherIncome.update({ where: { id }, data });
 
-    const studentPayments = await db.studentPayment.findMany({
-      where: studentPaymentWhere,
-      include: {
-        student: {
-          include: {
-            department: true,
-            specialization: true,
-          },
-        },
-      },
-      orderBy: { paymentDate: 'desc' },
-    });
-
-    // ===== Teacher payments (مفلترة بالفرع عبر علاقة teacher) =====
-    // ملاحظة: TeacherPayment ليس به حقل branchId مباشر — الفرع على Teacher
-    const teacherPaymentWhere: any = {};
-    if (month) teacherPaymentWhere.month = month;
-    // الفلترة بالفرع تتم عبر علاقة teacher
-    const teacherFilter: any = { ...branchFilter };
-    if (departmentId) teacherFilter.departmentId = departmentId;
-    teacherPaymentWhere.teacher = teacherFilter;
-
-    const teacherPayments = await db.teacherPayment.findMany({
-      where: teacherPaymentWhere,
-      include: {
-        teacher: { include: { department: true } },
-      },
-      orderBy: { paymentDate: 'desc' },
-    });
-
-    // ===== Expenses (مفلترة بالفرع) =====
-    const expenseWhere: any = { ...branchFilter };
-    if (dateRange) expenseWhere.date = dateRange;
-
-    const expenses = await db.expense.findMany({
-      where: expenseWhere,
-      orderBy: { date: 'desc' },
-    });
-
-    // ===== Staff payments (مفلترة بالفرع) =====
-    let staffPayments: any[] = [];
-    let totalStaffExpense = 0;
     try {
-      staffPayments = await (db as any).staffPayment.findMany({
-        where: branchFilter,
-        orderBy: { paymentDate: 'desc' },
+      await db.activityLog.create({
+        data: {
+          userId: user.id, userName: user.name, action: 'update', module: 'finance',
+          description: `تعديل مدخل آخر: ${existing.source} - ${existing.amount} دج`,
+          targetType: 'other_income', targetId: id,
+        },
       });
-      totalStaffExpense = staffPayments
-        .filter((p: any) => !p.isCancelled)
-        .reduce((s: number, p: any) => s + p.amount, 0);
     } catch {}
 
-    // ===== Other Income (مداخيل أخرى — إيجار قاعات، دورات خارجية، إلخ) =====
-    const otherIncomeWhere: any = { ...branchFilter };
-    if (dateRange) otherIncomeWhere.date = dateRange;
-    const otherIncomes = await db.otherIncome.findMany({
-      where: otherIncomeWhere,
-      orderBy: { date: 'desc' },
-    });
-    const totalOtherIncome = otherIncomes
-      .filter(i => !i.isCancelled)
-      .reduce((s, i) => s + i.amount, 0);
-
-    // ===== Totals =====
-    const totalIncome = studentPayments
-      .filter(p => !p.isCancelled && !p.isReversed)
-      .reduce((sum, p) => sum + p.amount, 0);
-    const totalTeacherExpense = teacherPayments
-      .filter(p => !p.isCancelled)
-      .reduce((sum, p) => sum + p.amount, 0);
-    const totalSecondaryExpense = expenses
-      .filter(e => !e.isCancelled)
-      .reduce((sum, e) => sum + e.amount, 0);
-    const totalExpense = totalTeacherExpense + totalSecondaryExpense + totalStaffExpense;
-    const totalIncomeAll_sources = totalIncome + totalOtherIncome;
-    const balance = totalIncomeAll_sources - totalExpense;
-
-    // ===== Grouping =====
-    let grouped: any = null;
-    if (groupBy === 'department') {
-      const groups: Record<string, { income: number; students: Set<string>; payments: number }> = {};
-      for (const p of studentPayments) {
-        if (p.isCancelled || p.isReversed) continue;
-        const deptName = p.student.department?.name || 'بدون قسم';
-        if (!groups[deptName]) groups[deptName] = { income: 0, students: new Set(), payments: 0 };
-        groups[deptName].income += p.amount;
-        groups[deptName].students.add(p.studentId);
-        groups[deptName].payments++;
-      }
-      grouped = Object.entries(groups).map(([name, data]) => ({
-        name,
-        income: data.income,
-        studentsCount: data.students.size,
-        paymentsCount: data.payments,
-      }));
-    } else if (groupBy === 'specialization') {
-      const groups: Record<string, { income: number; students: Set<string>; department: string }> = {};
-      for (const p of studentPayments) {
-        if (p.isCancelled || p.isReversed) continue;
-        const specName = p.student.specialization?.name || 'بدون تخصص';
-        const deptName = p.student.department?.name || 'بدون قسم';
-        if (!groups[specName]) groups[specName] = { income: 0, students: new Set(), department: deptName };
-        groups[specName].income += p.amount;
-        groups[specName].students.add(p.studentId);
-      }
-      grouped = Object.entries(groups).map(([name, data]) => ({
-        name,
-        department: data.department,
-        income: data.income,
-        studentsCount: data.students.size,
-      }));
-    } else if (groupBy === 'student') {
-      const groups: Record<string, { name: string; income: number; payments: number; department: string }> = {};
-      for (const p of studentPayments) {
-        if (p.isCancelled || p.isReversed) continue;
-        if (!groups[p.studentId]) {
-          groups[p.studentId] = {
-            name: p.student.name,
-            income: 0,
-            payments: 0,
-            department: p.student.department?.name || 'بدون قسم',
-          };
-        }
-        groups[p.studentId].income += p.amount;
-        groups[p.studentId].payments++;
-      }
-      grouped = Object.values(groups).sort((a, b) => b.income - a.income);
-    }
-
-    // ===== Expenses by type =====
-    const expensesByType: Record<string, number> = {};
-    for (const e of expenses) {
-      if (e.isCancelled) continue;
-      expensesByType[e.type] = (expensesByType[e.type] || 0) + e.amount;
-    }
-
-    // ===== All-time totals (مفلترة بالفرع) =====
-    const allStudentPayments = await db.studentPayment.findMany({ where: branchFilter });
-    const allTeacherPayments = await db.teacherPayment.findMany({ where: { teacher: { ...branchFilter } } });
-    const allExpenses = await db.expense.findMany({ where: branchFilter });
-    const totalIncomeAll = allStudentPayments
-      .filter(p => !p.isCancelled && !p.isReversed)
-      .reduce((s, p) => s + p.amount, 0);
-    const totalTeacherExpenseAll = allTeacherPayments
-      .filter(p => !p.isCancelled)
-      .reduce((s, p) => s + p.amount, 0);
-    const totalSecondaryExpenseAll = allExpenses
-      .filter(e => !e.isCancelled)
-      .reduce((s, e) => s + e.amount, 0);
-    const totalStaffExpenseAll = staffPayments
-      .filter(p => !p.isCancelled)
-      .reduce((s, p) => s + p.amount, 0);
-
-    // ===== Outstanding balances (مفلترة بالفرع) =====
-    const outstandingWhere: any = { ...branchFilter };
-    if (departmentId) outstandingWhere.departmentId = departmentId;
-    if (specializationId) outstandingWhere.specializationId = specializationId;
-    const students = await db.student.findMany({
-      where: outstandingWhere,
-      include: {
-        department: true,
-        specialization: true,
-        payments: true,
-        installments: true,
-      },
-    });
-    const outstanding = students.map(s => {
-      const paid = s.payments.reduce((sum, p) => sum + p.amount, 0);
-      const installmentsPaid = s.installments.reduce((sum, i) => sum + i.paidAmount, 0);
-      const installmentsExpected = s.installments.reduce((sum, i) => sum + i.expectedAmount, 0);
-      const totalPaid = paid + installmentsPaid;
-      const totalFees = installmentsExpected > 0 ? installmentsExpected : (s.departmentId ? 8000 : 0);
-      return {
-        id: s.id,
-        name: s.name,
-        studentNumber: s.studentNumber,
-        department: s.department?.name,
-        specialization: s.specialization?.name,
-        paid: totalPaid,
-        fees: totalFees,
-        remaining: Math.max(0, totalFees - totalPaid),
-      };
-    }).filter(s => s.remaining > 0);
-
-    // ===== Teacher totals (مفلترة بالفرع) =====
-    const teachers = await db.teacher.findMany({
-      where: branchFilter,
-      include: { payments: true },
-    });
-    const teacherTotals = teachers.map(t => {
-      const paid = t.payments.reduce((sum, p) => sum + p.amount, 0);
-      return { id: t.id, name: t.name, salary: t.salary, paid };
-    });
-
-    return NextResponse.json({
-      filters: { month, departmentId, specializationId, studentId, groupBy },
-      studentPayments,
-      teacherPayments,
-      expenses,
-      otherIncomes,
-      totalIncome,
-      totalOtherIncome,
-      totalIncomeAll_sources,
-      totalTeacherExpense,
-      totalSecondaryExpense,
-      totalStaffExpense,
-      totalExpense,
-      balance,
-      expensesByType,
-      grouped,
-      allTime: {
-        totalIncome: totalIncomeAll,
-        totalTeacherExpense: totalTeacherExpenseAll,
-        totalSecondaryExpense: totalSecondaryExpenseAll,
-        totalStaffExpense: totalStaffExpenseAll,
-        totalExpense: totalTeacherExpenseAll + totalSecondaryExpenseAll + totalStaffExpenseAll,
-        balance: totalIncomeAll - totalTeacherExpenseAll - totalSecondaryExpenseAll - totalStaffExpenseAll,
-      },
-      outstanding,
-      teacherTotals,
-    });
+    return NextResponse.json({ income: updated });
   } catch (error: any) {
-    if (error.message === 'UNAUTHORIZED') {
-      return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
-    }
-    if (error.message === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'القسم المالي متاح للمدير فقط' }, { status: 403 });
-    }
-    console.error('GET /api/finance/reports error:', error);
-    return NextResponse.json({ error: 'حدث خطأ: ' + (error.message || '') }, { status: 500 });
+    if (error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    console.error('PUT other-income error:', error);
+    return NextResponse.json({ error: error.message || 'حدث خطأ' }, { status: 500 });
+  }
+}
+
+// DELETE /api/finance/other-income/[id]
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuth();
+    const { id } = await params;
+
+    const existing = await db.otherIncome.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: 'غير موجود' }, { status: 404 });
+
+    await db.otherIncome.delete({ where: { id } });
+
+    try {
+      await db.activityLog.create({
+        data: {
+          userId: user.id, userName: user.name, action: 'delete', module: 'finance',
+          description: `حذف مدخل آخر: ${existing.source} - ${existing.amount} دج`,
+          targetType: 'other_income', targetId: id,
+        },
+      });
+    } catch {}
+
+    return NextResponse.json({ success: true, message: 'تم الحذف' });
+  } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    console.error('DELETE other-income error:', error);
+    return NextResponse.json({ error: error.message || 'حدث خطأ' }, { status: 500 });
   }
 }
