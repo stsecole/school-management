@@ -1480,13 +1480,35 @@ function OtherIncomeTab() {
 
   useEffect(() => { load(); }, [search, sourceFilter]);
 
+  const [saving, setSaving] = useState(false);
+
   const handleSave = async () => {
-    if (!formData.source || !formData.amount) { toast({ title: 'تنبيه', description: 'المصدر والمبلغ مطلوبان', variant: 'destructive' }); return; }
-    const url = editing ? `/api/finance/other-income/${editing.id}` : '/api/finance/other-income';
-    const method = editing ? 'PUT' : 'POST';
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-    if (res.ok) { toast({ title: 'تم', description: editing ? 'تم التحديث' : 'تمت الإضافة' }); setDialogOpen(false); load(); }
-    else { const d = await res.json(); toast({ title: 'خطأ', description: d.error, variant: 'destructive' }); }
+    if (!formData.source || !formData.amount) {
+      toast({ title: 'تنبيه', description: 'المصدر والمبلغ مطلوبان', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const url = editing ? `/api/finance/other-income/${editing.id}` : '/api/finance/other-income';
+      const method = editing ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({ title: 'تم', description: editing ? 'تم التحديث' : 'تمت الإضافة' });
+        setDialogOpen(false);
+        load();
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل الحفظ', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'خطأ', description: 'تعذر الاتصال بالخادم: ' + (e?.message || ''), variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -1592,7 +1614,9 @@ function OtherIncomeTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>{editing ? 'حفظ' : 'إضافة'}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'جاري الحفظ...' : editing ? 'حفظ' : 'إضافة'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
