@@ -54,13 +54,26 @@ interface Report {
   studentPayments: StudentPayment[];
   teacherPayments: TeacherPayment[];
   expenses: Expense[];
+  otherIncomes?: any[];
   totalIncome: number;
+  totalOtherIncome?: number;
+  totalIncomeAll_sources?: number;
   totalTeacherExpense: number;
   totalSecondaryExpense: number;
+  totalStaffExpense?: number;
   totalExpense: number;
   balance: number;
   expensesByType: Record<string, number>;
-  allTime: { totalIncome: number; totalTeacherExpense: number; totalSecondaryExpense: number; totalExpense: number; balance: number };
+  allTime: {
+    totalIncome: number;
+    totalStudentIncome?: number;
+    totalOtherIncome?: number;
+    totalTeacherExpense: number;
+    totalSecondaryExpense: number;
+    totalStaffExpense?: number;
+    totalExpense: number;
+    balance: number;
+  };
   outstanding: { id: string; name: string; studentNumber: string | null; department: string | null; paid: number; fees: number; remaining: number }[];
   teacherTotals: { id: string; name: string; salary: number; paid: number }[];
 }
@@ -128,7 +141,7 @@ function OverviewTab() {
   return (
     <div className="space-y-4">
       {/* All-time totals */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <Card className="border-emerald-200 bg-emerald-50/50">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
@@ -156,6 +169,15 @@ function OverviewTab() {
             <p className="text-2xl font-bold text-red-700 num">{currency(report.allTime.totalTeacherExpense)}</p>
           </CardContent>
         </Card>
+        <Card className="border-purple-200 bg-purple-50/50">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">رواتب الموظفين</span>
+              <UserCog className="w-5 h-5 text-purple-600" />
+            </div>
+            <p className="text-2xl font-bold text-purple-700 num">{currency(report.allTime.totalStaffExpense || 0)}</p>
+          </CardContent>
+        </Card>
         <Card className="border-orange-200 bg-orange-50/50">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-2">
@@ -175,7 +197,7 @@ function OverviewTab() {
               {currency(report.allTime.balance)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              إجمالي المداخيل: <span className="num font-medium text-emerald-600">{currency(report.allTime.totalIncome)}</span>
+              إجمالي المصاريف: <span className="num font-medium text-red-600">{currency(report.allTime.totalExpense)}</span>
             </p>
           </CardContent>
         </Card>

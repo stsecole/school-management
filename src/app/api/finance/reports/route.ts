@@ -76,18 +76,42 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'desc' },
     });
 
-    // ===== Staff payments (مفلترة بالفرع) =====
+    // ===== Staff payments للشهر الحالي (مفلترة بالفرع + الشهر) =====
+    // raw SQL لأن Prisma لا يعرف branchId (غير موجود في schema)
     let staffPayments: any[] = [];
     let totalStaffExpense = 0;
     try {
-      staffPayments = await (db as any).staffPayment.findMany({
-        where: branchFilter,
-        orderBy: { paymentDate: 'desc' },
-      });
-      totalStaffExpense = staffPayments
-        .filter((p: any) => !p.isCancelled)
-        .reduce((s: number, p: any) => s + p.amount, 0);
-    } catch {}
+      const branchIdVal = (branchFilter as any).branchId;
+      // طبّق فلتر الشهر إذا وُجد (month بصيغة "YYYY-MM")
+      let monthClause = '';
+      const params: any[] = [];
+      if (branchIdVal !== undefined && branchIdVal !== null) {
+        params.push(branchIdVal);
+        const branchCond = `"branchId" = $${params.length}`;
+        if (month) {
+          params.push(month);
+          monthClause = ` AND "month" = $${params.length}`;
+        }
+        staffPayments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment" WHERE ${branchCond}${monthClause} AND "isCancelled" = false ORDER BY "paymentDate" DESC`,
+          ...params
+        ) as any[];
+      } else {
+        if (month) {
+          params.push(month);
+          monthClause = ` WHERE "month" = $${params.length} AND "isCancelled" = false`;
+        } else {
+          monthClause = ` WHERE "isCancelled" = false`;
+        }
+        staffPayments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment"${monthClause} ORDER BY "paymentDate" DESC`,
+          ...params
+        ) as any[];
+      }
+      totalStaffExpense = staffPayments.reduce((s: number, p: any) => s + p.amount, 0);
+    } catch (e: any) {
+      console.log('StaffPayment query failed:', e.message);
+    }
 
     // ===== Other Income (مداخيل أخرى — إيجار قاعات، دورات خارجية، إلخ) =====
     const otherIncomeWhere: any = { ...branchFilter };
@@ -186,6 +210,24 @@ export async function GET(request: NextRequest) {
       .filter((i: any) => !i.isCancelled)
       .reduce((s: number, i: any) => s + i.amount, 0);
 
+    // All-time staff payments (كل الأشهر، مفلتر بالفرع فقط)
+    let allStaffPayments: any[] = [];
+    try {
+      const branchIdVal = (branchFilter as any).branchId;
+      if (branchIdVal !== undefined && branchIdVal !== null) {
+        allStaffPayments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment" WHERE "branchId" = $1 AND "isCancelled" = false`,
+          branchIdVal
+        ) as any[];
+      } else {
+        allStaffPayments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment" WHERE "isCancelled" = false`
+        ) as any[];
+      }
+    } catch (e: any) {
+      console.log('allStaffPayments query failed:', e.message);
+    }
+
     const totalIncomeAll = allStudentPayments
       .filter(p => !p.isCancelled && !p.isReversed)
       .reduce((s, p) => s + p.amount, 0);
@@ -196,9 +238,8 @@ export async function GET(request: NextRequest) {
     const totalSecondaryExpenseAll = allExpenses
       .filter(e => !e.isCancelled)
       .reduce((s, e) => s + e.amount, 0);
-    const totalStaffExpenseAll = staffPayments
-      .filter(p => !p.isCancelled)
-      .reduce((s, p) => s + p.amount, 0);
+    const totalStaffExpenseAll = allStaffPayments
+      .reduce((s: number, p: any) => s + p.amount, 0);
 
     // ===== Outstanding balances (مفلترة بالفرع) =====
     const outstandingWhere: any = { ...branchFilter };
