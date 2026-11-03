@@ -3,15 +3,16 @@ import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
-// ===== Auto-create table if missing =====
+// ===== Auto-create table + add missing columns =====
 let tableEnsured = false;
 async function ensureTable() {
   if (tableEnsured) return;
   try {
-    await (db as any).staffPayment.findFirst({ select: { id: true } });
-    tableEnsured = true;
-  } catch {
+    // تحقق من وجود الجدول
     try {
+      await (db as any).staffPayment.findFirst({ select: { id: true } });
+    } catch {
+      // الجدول غير موجود — أنشئه
       await db.$executeRaw`
         CREATE TABLE IF NOT EXISTS "StaffPayment" (
           "id" TEXT NOT NULL PRIMARY KEY,
@@ -31,18 +32,41 @@ async function ensureTable() {
           "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
       `;
-      try {
-        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_staffName_idx" ON "StaffPayment"("staffName")`;
-        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_paymentDate_idx" ON "StaffPayment"("paymentDate")`;
-        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_receiptNumber_idx" ON "StaffPayment"("receiptNumber")`;
-        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_isCancelled_idx" ON "StaffPayment"("isCancelled")`;
-        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_branchId_idx" ON "StaffPayment"("branchId")`;
-      } catch {}
-      tableEnsured = true;
-      console.log('StaffPayment table created successfully');
-    } catch (e: any) {
-      console.error('Failed to create StaffPayment table:', e.message);
     }
+
+    // تحقق من وجود عمود branchId وأضفه إذا لم يكن موجوداً
+    try {
+      await db.$executeRawUnsafe(`SELECT "branchId" FROM "StaffPayment" LIMIT 1`);
+    } catch {
+      // عمود branchId غير موجود — أضفه
+      console.log('Adding branchId column to StaffPayment...');
+      try {
+        await db.$executeRawUnsafe(`ALTER TABLE "StaffPayment" ADD COLUMN IF NOT EXISTS "branchId" TEXT`);
+        console.log('branchId column added successfully');
+      } catch (e: any) {
+        // PostgreSQL قد لا يدعم IF NOT EXISTS في ALTER TABLE في بعض الإصدارات
+        try {
+          await db.$executeRawUnsafe(`ALTER TABLE "StaffPayment" ADD COLUMN "branchId" TEXT`);
+          console.log('branchId column added (without IF NOT EXISTS)');
+        } catch (e2: any) {
+          console.log('branchId column might already exist:', e2.message);
+        }
+      }
+    }
+
+    // أضف indexes
+    try {
+      await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_staffName_idx" ON "StaffPayment"("staffName")`;
+      await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_paymentDate_idx" ON "StaffPayment"("paymentDate")`;
+      await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_receiptNumber_idx" ON "StaffPayment"("receiptNumber")`;
+      await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_isCancelled_idx" ON "StaffPayment"("isCancelled")`;
+      await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_branchId_idx" ON "StaffPayment"("branchId")`;
+    } catch {}
+
+    tableEnsured = true;
+  } catch (e: any) {
+    console.error('ensureTable error:', e.message);
+    tableEnsured = true; // لا نعيد المحاولة في كل طلب
   }
 }
 
@@ -254,15 +278,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // أضف branchId عبر raw SQL (لأن Prisma Client قد لا يعرفه)
+      // أضف branchId عبر raw SQL (لأن Prisma Client لا يعرفه)
       const newBranchId = await getBranchIdForNewRecord();
       if (newBranchId) {
         try {
-          await db.$executeRawUnsafe(
-            `UPDATE "StaffPayment" SET "branchId" = $1 WHERE "id" = $2`,
-            newBranchId, payment.id
-          );
-        } catch {}
+          await db.$executeRaw`UPDATE "StaffPayment" SET "branchId" = ${newBranchId} WHERE "id" = ${payment.id}`;
+        } catch (e: any) {
+          console.error('Failed to set branchId on StaffPayment:', e.message);
+        }
       }
     } catch (err: any) {
       console.error('StaffPayment model error:', err);
