@@ -34,8 +34,6 @@ interface StudentPayment {
   paymentDate: string;
   paymentMethod: string | null;
   notes: string | null;
-  receivedByName?: string | null;
-  createdAt?: string;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -78,6 +76,7 @@ export function FinanceDashboard({ isDirector = false }: { isDirector?: boolean 
         { value: 'student-payments', label: 'أقساط الطلاب', icon: Users },
         { value: 'other-income', label: 'مداخيل أخرى', icon: TrendingUp },
         { value: 'teacher-payments', label: 'رواتب الأساتذة', icon: GraduationCap },
+        { value: 'staff-payments', label: 'رواتب الموظفين', icon: UserCog },
         { value: 'expenses', label: 'مصاريف ثانوية', icon: ReceiptIndianRupee },
         { value: 'reports', label: 'التقارير', icon: FileText },
         { value: 'receipts', label: 'الوصولات', icon: Receipt },
@@ -106,6 +105,7 @@ export function FinanceDashboard({ isDirector = false }: { isDirector?: boolean 
         <TabsContent value="student-payments"><StudentPaymentsTab isDirector={isDirector} /></TabsContent>
         {isDirector && <TabsContent value="other-income"><OtherIncomeTab /></TabsContent>}
         {isDirector && <TabsContent value="teacher-payments"><TeacherPaymentsTab /></TabsContent>}
+        {isDirector && <TabsContent value="staff-payments"><StaffPaymentsTab /></TabsContent>}
         {isDirector && <TabsContent value="expenses"><ExpensesTab /></TabsContent>}
         {isDirector && <TabsContent value="reports"><ReportsTab /></TabsContent>}
         <TabsContent value="receipts"><ReceiptsTab isDirector={isDirector} /></TabsContent>
@@ -290,7 +290,6 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
   const [search, setSearch] = useState('');
   const [filterStudent, setFilterStudent] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     studentId: '', amount: '', paymentType: 'installment', paymentLabel: 'قسط',
     paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', notes: '',
@@ -319,24 +318,16 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
       toast({ title: 'تنبيه', description: 'يرجى اختيار الطالب وإدخال المبلغ', variant: 'destructive' });
       return;
     }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/finance/student-payments', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
-        setDialogOpen(false);
-        setFormData({ ...formData, studentId: '', amount: '', notes: '' });
-        load();
-      } else {
-        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل', variant: 'destructive' });
-      }
-    } catch (e: any) {
-      toast({ title: 'خطأ', description: 'تعذر الاتصال: ' + (e?.message || ''), variant: 'destructive' });
-    } finally {
-      setSaving(false);
+    const res = await fetch('/api/finance/student-payments', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+    });
+    if (res.ok) {
+      toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
+      setDialogOpen(false);
+      setFormData({ ...formData, studentId: '', amount: '', notes: '' });
+      load();
+    } else {
+      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
     }
   };
 
@@ -495,7 +486,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري التسجيل...' : 'تسجيل الدفعة'}</Button>
+            <Button onClick={handleSave}>تسجيل الدفعة</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1103,19 +1094,17 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
 
           {/* Table */}
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            <div style={{ minWidth: '900px' }}>
+            <div style={{ minWidth: '720px' }}>
               {/* Header */}
               <div
                 className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
-                style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
+                style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
               >
                 <div className="text-right">رقم الوصل</div>
                 <div className="text-right">التاريخ</div>
                 <div className="text-right">الطالب</div>
                 <div className="text-center">النوع</div>
                 <div className="text-center">المبلغ</div>
-                <div className="text-center">وقت التسجيل</div>
-                <div className="text-center">المسجِّل</div>
                 <div className="text-center">طباعة</div>
               </div>
               {/* Body */}
@@ -1127,17 +1116,13 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
                 <div
                   key={p.id}
                   className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
-                  style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
+                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
                 >
                   <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
                   <div className="text-right font-medium">{p.student?.name || '-'}</div>
                   <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
                   <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
-                  <div className="text-center num text-xs text-muted-foreground">
-                    {p.createdAt ? new Date(p.createdAt).toLocaleString('ar', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
-                  </div>
-                  <div className="text-center text-xs text-muted-foreground">{p.receivedByName || '-'}</div>
                   <div className="text-center">
                     <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')}>
                       <Printer className="w-4 h-4 ml-1" /> طباعة
@@ -1149,14 +1134,12 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
               {filteredPayments.length > 0 && (
                 <div
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
-                  style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
+                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
                 >
-                  <div style={{ gridColumn: '1 / span 5' }} className="text-left">
+                  <div style={{ gridColumn: '1 / span 4' }} className="text-left">
                     الإجمالي ({filteredPayments.length} وصل):
                   </div>
                   <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
-                  <div></div>
-                  <div></div>
                   <div></div>
                 </div>
               )}
@@ -1648,6 +1631,184 @@ function OtherIncomeTab() {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'جاري الحفظ...' : editing ? 'حفظ' : 'إضافة'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ============ STAFF PAYMENTS TAB (رواتب الموظفين) ============
+function StaffPaymentsTab() {
+  const [payments, setPayments] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState<any>({
+    staffName: '', staffRole: '', amount: '', month: '',
+    paymentDate: new Date().toISOString().split('T')[0], note: '',
+  });
+  const { toast } = useToast();
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/finance/staff-payments');
+      const data = await res.json();
+      setPayments(data.payments || []);
+      setTotal(data.total || 0);
+    } catch { toast({ title: 'خطأ', description: 'فشل التحميل', variant: 'destructive' }); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    fetch('/api/users/staff-names').then(r => r.json()).then(d => setStaff(d.staff || [])).catch(() => {});
+    load();
+  }, []);
+
+  const filtered = payments.filter(p => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (p.staffName || '').toLowerCase().includes(q) ||
+           (p.receiptNumber || '').toLowerCase().includes(q) ||
+           (p.note || '').toLowerCase().includes(q);
+  });
+
+  const handleSave = async () => {
+    if (!formData.staffName || !formData.amount) {
+      toast({ title: 'تنبيه', description: 'اسم الموظف والمبلغ مطلوبان', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/finance/staff-payments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({ title: 'تم', description: 'تم تسجيل الراتب' });
+        setDialogOpen(false);
+        setFormData({ staffName: '', staffRole: '', amount: '', month: '', paymentDate: new Date().toISOString().split('T')[0], note: '' });
+        load();
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'خطأ', description: 'تعذر الاتصال: ' + (e?.message || ''), variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('حذف هذا الراتب؟')) return;
+    try {
+      const res = await fetch(`/api/finance/staff-payments/${id}`, { method: 'DELETE' });
+      if (res.ok) { toast({ title: 'تم', description: 'تم الحذف' }); load(); }
+      else { const d = await res.json().catch(() => ({})); toast({ title: 'خطأ', description: d.error || 'فشل الحذف', variant: 'destructive' }); }
+    } catch { toast({ title: 'خطأ', description: 'تعذر الاتصال', variant: 'destructive' }); }
+  };
+
+  const formatDate = (d: string) => { const dt = new Date(d); return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`; };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">إجمالي: <span className="num font-bold text-emerald-700">{currency(total)}</span></p>
+        <Button onClick={() => setDialogOpen(true)}><Plus className="w-4 h-4 ml-2" /> صرف راتب</Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="بحث بالاسم أو رقم الوصل..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <div className="min-w-[700px]">
+              <div className="grid bg-muted/50 font-medium text-sm border-b" style={{ gridTemplateColumns: '120px 1fr 100px 100px 120px 80px' }}>
+                <div className="py-2 px-3 border-l">رقم الوصل</div>
+                <div className="py-2 px-3 border-l">الموظف</div>
+                <div className="py-2 px-3 border-l text-center">المبلغ</div>
+                <div className="py-2 px-3 border-l text-center">الشهر</div>
+                <div className="py-2 px-3 border-l text-center">التاريخ</div>
+                <div className="py-2 px-2 text-center">حذف</div>
+              </div>
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">لا توجد رواتب موظفين</div>
+              ) : filtered.map(p => (
+                <div key={p.id} className={`grid border-b hover:bg-muted/30 text-sm ${p.isCancelled ? 'opacity-50 line-through' : ''}`} style={{ gridTemplateColumns: '120px 1fr 100px 100px 120px 80px' }}>
+                  <div className="py-2 px-3 border-l num text-xs">{p.receiptNumber}</div>
+                  <div className="py-2 px-3 border-l">
+                    <div className="font-medium">{p.staffName}</div>
+                    {p.staffRole && <div className="text-xs text-muted-foreground">{p.staffRole}</div>}
+                    {p.notes && <div className="text-xs text-muted-foreground">{p.notes}</div>}
+                  </div>
+                  <div className="py-2 px-3 border-l text-center num font-bold text-red-700">{currency(p.amount)}</div>
+                  <div className="py-2 px-3 border-l text-center num text-xs">{p.month || '-'}</div>
+                  <div className="py-2 px-3 border-l text-center num text-xs">{formatDate(p.paymentDate)}</div>
+                  <div className="py-2 px-2 flex items-center justify-center">
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)} className="h-8 w-8 p-0 hover:bg-red-50"><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>صرف راتب موظف</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>اسم الموظف *</Label>
+              {staff.length > 0 ? (
+                <Select value={formData.staffName} onValueChange={(v) => {
+                  const s = staff.find(x => x.name === v);
+                  setFormData({ ...formData, staffName: v, staffRole: s?.role === 'director' ? 'مدير' : 'موظف' });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="اختر الموظف" /></SelectTrigger>
+                  <SelectContent>
+                    {staff.map(s => <SelectItem key={s.id} value={s.name}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={formData.staffName} onChange={(e) => setFormData({ ...formData, staffName: e.target.value })} placeholder="اسم الموظف" />
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>المبلغ (دج) *</Label>
+                <Input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label>الشهر</Label>
+                <Input type="month" value={formData.month} onChange={(e) => setFormData({ ...formData, month: e.target.value })} dir="ltr" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>تاريخ الدفع</Label>
+              <Input type="date" value={formData.paymentDate} onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })} dir="ltr" />
+            </div>
+            <div className="space-y-2">
+              <Label>ملاحظات</Label>
+              <Input value={formData.note} onChange={(e) => setFormData({ ...formData, note: e.target.value })} placeholder="مثال: راتب شهر..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري التسجيل...' : 'تسجيل'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
