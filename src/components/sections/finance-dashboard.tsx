@@ -90,7 +90,7 @@ export function FinanceDashboard({ isDirector = false }: { isDirector?: boolean 
   return (
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className={`grid w-full grid-cols-2 ${isDirector ? 'md:grid-cols-6' : ''}`}>
+        <TabsList className="flex flex-wrap w-full h-auto gap-1">
           {visibleTabs.map(t => {
             const Icon = t.icon;
             return (
