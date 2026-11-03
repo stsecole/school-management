@@ -290,6 +290,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
   const [search, setSearch] = useState('');
   const [filterStudent, setFilterStudent] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     studentId: '', amount: '', paymentType: 'installment', paymentLabel: 'قسط',
     paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', notes: '',
@@ -318,16 +319,24 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
       toast({ title: 'تنبيه', description: 'يرجى اختيار الطالب وإدخال المبلغ', variant: 'destructive' });
       return;
     }
-    const res = await fetch('/api/finance/student-payments', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
-    });
-    if (res.ok) {
-      toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
-      setDialogOpen(false);
-      setFormData({ ...formData, studentId: '', amount: '', notes: '' });
-      load();
-    } else {
-      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
+    setSaving(true);
+    try {
+      const res = await fetch('/api/finance/student-payments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
+        setDialogOpen(false);
+        setFormData({ ...formData, studentId: '', amount: '', notes: '' });
+        load();
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'خطأ', description: 'تعذر الاتصال: ' + (e?.message || ''), variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -486,7 +495,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>تسجيل الدفعة</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري التسجيل...' : 'تسجيل الدفعة'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -503,6 +512,7 @@ function TeacherPaymentsTab() {
   const [filterTeacher, setFilterTeacher] = useState('all');
   const [filterMonth, setFilterMonth] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     teacherId: '', amount: '', month: '', paymentDate: new Date().toISOString().split('T')[0],
     paymentType: 'salary', paymentLabel: 'راتب', notes: '',
@@ -532,16 +542,24 @@ function TeacherPaymentsTab() {
       toast({ title: 'تنبيه', description: 'يرجى ملء جميع الحقول المطلوبة', variant: 'destructive' });
       return;
     }
-    const res = await fetch('/api/finance/teacher-payments', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
-    });
-    if (res.ok) {
-      toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
-      setDialogOpen(false);
-      setFormData({ ...formData, teacherId: '', amount: '', month: '', notes: '' });
-      load();
-    } else {
-      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
+    setSaving(true);
+    try {
+      const res = await fetch('/api/finance/teacher-payments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
+        setDialogOpen(false);
+        setFormData({ ...formData, teacherId: '', amount: '', month: '', notes: '' });
+        load();
+      } else {
+        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل', variant: 'destructive' });
+      }
+    } catch (e: any) {
+      toast({ title: 'خطأ', description: 'تعذر الاتصال: ' + (e?.message || ''), variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -689,7 +707,7 @@ function TeacherPaymentsTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave}>تسجيل الدفعة</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري التسجيل...' : 'تسجيل الدفعة'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
