@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
 // GET /api/finance/staff-payments
 export async function GET(request: NextRequest) {
@@ -9,8 +10,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const month = searchParams.get('month');
+    const userId = searchParams.get('userId');
 
-    const where: any = {};
+    const branchFilter = await getBranchFilter();
+    const where: any = { ...branchFilter };
     if (search) {
       where.OR = [
         { staffName: { contains: search } },
@@ -28,35 +31,61 @@ export async function GET(request: NextRequest) {
         where,
         orderBy: { paymentDate: 'desc' },
       });
+
+      // فلترة يدوية بـ userId إذا كان مطلوباً
+      if (userId && userId !== 'all') {
+        try {
+          const userRecord = await db.user.findUnique({ where: { id: userId } });
+          if (userRecord) {
+            payments = payments.filter((p: any) => p.staffName === userRecord.name);
+          }
+        } catch {}
+      }
+
       // استثني الوصولات المشطوبة من المجموع
       total = payments
         .filter((p: any) => !p.isCancelled)
         .reduce((s: number, p: any) => s + p.amount, 0);
     } catch (err: any) {
-      console.log('StaffPayment model not found, returning empty list');
+      console.log('StaffPayment model not found, returning empty list:', err.message);
       return NextResponse.json({ payments: [], total: 0 });
     }
 
     // تنسيق البيانات للواجهة
-    const formattedPayments = payments.map((p: any) => ({
-      id: p.id,
-      receiptNumber: p.receiptNumber || '',
-      userId: '',
-      userName: p.staffName,
-      staffName: p.staffName,
-      staffRole: p.staffRole,
-      amount: p.amount,
-      month: p.month || '',
-      paymentDate: p.paymentDate instanceof Date ? p.paymentDate.toISOString() : p.paymentDate,
-      paymentType: 'salary',
-      paymentLabel: null,
-      notes: p.note,
-      note: p.note,
-      isCancelled: p.isCancelled || false,
-      cancelledAt: p.cancelledAt,
-      cancelReason: p.cancelReason,
-      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
-    }));
+    const formattedPayments = payments.map((p: any) => {
+      let paymentType = 'salary';
+      let paymentLabel: string | null = null;
+      let notes: string | null = p.note;
+      if (p.note) {
+        const parts = p.note.split(' - ');
+        for (const part of parts) {
+          if (part.startsWith('(') && part.endsWith(')')) {
+            paymentType = part.slice(1, -1);
+          } else if (!paymentLabel && part !== p.note) {
+            paymentLabel = part;
+          }
+        }
+      }
+      return {
+        id: p.id,
+        receiptNumber: p.receiptNumber || '',
+        userId: '',
+        userName: p.staffName,
+        staffName: p.staffName,
+        staffRole: p.staffRole,
+        amount: p.amount,
+        month: p.month || '',
+        paymentDate: p.paymentDate instanceof Date ? p.paymentDate.toISOString() : p.paymentDate,
+        paymentType,
+        paymentLabel,
+        notes,
+        note: p.note,
+        isCancelled: p.isCancelled || false,
+        cancelledAt: p.cancelledAt,
+        cancelReason: p.cancelReason,
+        createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      };
+    });
 
     return NextResponse.json({ payments: formattedPayments, total });
   } catch (error: any) {
@@ -84,7 +113,7 @@ export async function POST(request: NextRequest) {
       try {
         const userRecord = await db.user.findUnique({ where: { id: userId } });
         if (userRecord) {
-          staffName = userRecord.name;  // ← إصلاح: تعيين القيمة مباشرة
+          staffName = userRecord.name;
           if (!staffRole) {
             staffRole = userRecord.role === 'director' ? 'مدير' : 'موظف';
           }
@@ -144,6 +173,7 @@ export async function POST(request: NextRequest) {
           note: finalNote,
           receiptNumber,
           isCancelled: false,
+          branchId: await getBranchIdForNewRecord(),
         },
       });
     } catch (err: any) {
