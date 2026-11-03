@@ -74,16 +74,41 @@ export async function GET(request: NextRequest) {
     let payments: any[] = [];
     let total = 0;
     try {
-      payments = await (db as any).staffPayment.findMany({
-        where,
-        orderBy: { paymentDate: 'desc' },
-      });
-
-      // فلترة يدوية بالفرع (لأن branchId قد لا يكون في Prisma schema المحلي)
+      // استخدم raw SQL بدلاً من Prisma findMany
+      // لأن Prisma لا يعرف branchId (غير موجود في schema المحلي)
+      // raw SQL يرجع كل الأعمدة بما فيها branchId
       const branchIdFilter = (branchFilter as any).branchId;
-      if (branchIdFilter !== undefined) {
-        payments = payments.filter((p: any) => p.branchId === branchIdFilter);
+
+      if (branchIdFilter !== undefined && branchIdFilter !== null) {
+        // فلتر بالفرع عبر SQL مباشرة
+        payments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment" WHERE "branchId" = $1 ORDER BY "paymentDate" DESC`,
+          branchIdFilter
+        ) as any[];
+      } else {
+        // كل الفروع (مدير بدون فرع محدد)
+        payments = await db.$queryRawUnsafe(
+          `SELECT * FROM "StaffPayment" ORDER BY "paymentDate" DESC`
+        ) as any[];
       }
+
+      // فلترة بالبحث النصي
+      if (search) {
+        const q = search.toLowerCase();
+        payments = payments.filter((p: any) =>
+          (p.staffName || '').toLowerCase().includes(q) ||
+          (p.staffRole || '').toLowerCase().includes(q) ||
+          (p.receiptNumber || '').toLowerCase().includes(q) ||
+          (p.note || '').toLowerCase().includes(q)
+        );
+      }
+
+      // فلترة بالشهر
+      if (month && month !== 'all') {
+        payments = payments.filter((p: any) => p.month === month);
+      }
+
+      // فلترة بـ userId
       if (userId && userId !== 'all') {
         try {
           const userRecord = await db.user.findUnique({ where: { id: userId } });
