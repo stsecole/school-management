@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Trash2, Download, Printer, Wallet, TrendingUp, TrendingDown,
-  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit,
+  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -512,7 +512,6 @@ function TeacherPaymentsTab() {
   const [filterTeacher, setFilterTeacher] = useState('all');
   const [filterMonth, setFilterMonth] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     teacherId: '', amount: '', month: '', paymentDate: new Date().toISOString().split('T')[0],
     paymentType: 'salary', paymentLabel: 'راتب', notes: '',
@@ -542,24 +541,16 @@ function TeacherPaymentsTab() {
       toast({ title: 'تنبيه', description: 'يرجى ملء جميع الحقول المطلوبة', variant: 'destructive' });
       return;
     }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/finance/teacher-payments', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
-        setDialogOpen(false);
-        setFormData({ ...formData, teacherId: '', amount: '', month: '', notes: '' });
-        load();
-      } else {
-        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل', variant: 'destructive' });
-      }
-    } catch (e: any) {
-      toast({ title: 'خطأ', description: 'تعذر الاتصال: ' + (e?.message || ''), variant: 'destructive' });
-    } finally {
-      setSaving(false);
+    const res = await fetch('/api/finance/teacher-payments', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData),
+    });
+    if (res.ok) {
+      toast({ title: 'تم', description: 'تم تسجيل الدفعة' });
+      setDialogOpen(false);
+      setFormData({ ...formData, teacherId: '', amount: '', month: '', notes: '' });
+      load();
+    } else {
+      toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
     }
   };
 
@@ -707,7 +698,7 @@ function TeacherPaymentsTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري التسجيل...' : 'تسجيل الدفعة'}</Button>
+            <Button onClick={handleSave}>تسجيل الدفعة</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
