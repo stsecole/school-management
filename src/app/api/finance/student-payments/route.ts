@@ -25,10 +25,7 @@ export async function GET(request: NextRequest) {
       orderBy: { paymentDate: 'desc' },
     });
 
-    // استثني الوصولات المشطوبة من المجموع
-    const total = payments
-      .filter((p: any) => !p.isCancelled)
-      .reduce((sum, p) => sum + p.amount, 0);
+    const total = payments.reduce((sum, p) => sum + p.amount, 0);
 
     return NextResponse.json({ payments, total });
   } catch (error: any) {
@@ -43,7 +40,7 @@ export async function GET(request: NextRequest) {
 // POST /api/finance/student-payments
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
 
     const body = await request.json();
 
@@ -86,6 +83,8 @@ export async function POST(request: NextRequest) {
           installmentId: body.installmentId || null,
           notes: body.notes || null,
           branchId: newBranchId,
+          receivedBy: user.id,
+          receivedByName: user.name,
         },
         include: { student: true },
       });

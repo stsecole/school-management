@@ -34,6 +34,8 @@ interface StudentPayment {
   paymentDate: string;
   paymentMethod: string | null;
   notes: string | null;
+  receivedByName?: string | null;
+  createdAt?: string;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -1092,17 +1094,19 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
 
           {/* Table */}
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            <div style={{ minWidth: '720px' }}>
+            <div style={{ minWidth: '900px' }}>
               {/* Header */}
               <div
                 className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
-                style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
               >
                 <div className="text-right">رقم الوصل</div>
                 <div className="text-right">التاريخ</div>
                 <div className="text-right">الطالب</div>
                 <div className="text-center">النوع</div>
                 <div className="text-center">المبلغ</div>
+                <div className="text-center">وقت التسجيل</div>
+                <div className="text-center">المسجِّل</div>
                 <div className="text-center">طباعة</div>
               </div>
               {/* Body */}
@@ -1114,13 +1118,17 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
                 <div
                   key={p.id}
                   className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
-                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                  style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
                 >
                   <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
                   <div className="text-right font-medium">{p.student?.name || '-'}</div>
                   <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
                   <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
+                  <div className="text-center num text-xs text-muted-foreground">
+                    {p.createdAt ? new Date(p.createdAt).toLocaleString('ar', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                  </div>
+                  <div className="text-center text-xs text-muted-foreground">{p.receivedByName || '-'}</div>
                   <div className="text-center">
                     <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')}>
                       <Printer className="w-4 h-4 ml-1" /> طباعة
@@ -1132,12 +1140,14 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
               {filteredPayments.length > 0 && (
                 <div
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
-                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                  style={{ gridTemplateColumns: '110px 90px 1fr 100px 110px 120px 100px 100px' }}
                 >
-                  <div style={{ gridColumn: '1 / span 4' }} className="text-left">
+                  <div style={{ gridColumn: '1 / span 5' }} className="text-left">
                     الإجمالي ({filteredPayments.length} وصل):
                   </div>
                   <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
+                  <div></div>
+                  <div></div>
                   <div></div>
                 </div>
               )}
