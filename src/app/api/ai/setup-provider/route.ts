@@ -1,4 +1,4 @@
-// ===== POST /api/ai/setup-provider — حفظ إعدادات أي مزود مباشرة =====
+\// ===== POST /api/ai/setup-provider — حفظ إعدادات أي مزود مباشرة =====
 // هذا المسار يتجاوز TypeScript types — يكتب الإعدادات كنصوص مباشرة في قاعدة البيانات
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const PROVIDER_CONFIG: Record<string, { model: string; label: string }> = {
-  groq: { model: 'llama-3.1-8b-instant', label: 'Groq' },
+  groq: { model: 'llama-3.3-70b-versatile', label: 'Groq' },
   gemini: { model: 'gemini-1.5-flash', label: 'Google Gemini' },
   openai: { model: 'gpt-4o-mini', label: 'OpenAI' },
   deepseek: { model: 'deepseek-chat', label: 'DeepSeek' },
