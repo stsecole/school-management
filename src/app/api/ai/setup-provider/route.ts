@@ -1,4 +1,4 @@
-\// ===== POST /api/ai/setup-provider — حفظ إعدادات أي مزود مباشرة =====
+// ===== POST /api/ai/setup-provider — حفظ إعدادات أي مزود مباشرة =====
 // هذا المسار يتجاوز TypeScript types — يكتب الإعدادات كنصوص مباشرة في قاعدة البيانات
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
