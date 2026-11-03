@@ -3,10 +3,55 @@ import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { getBranchFilter, getBranchIdForNewRecord } from '@/lib/branch-filter';
 
+// ===== Auto-create table if missing =====
+let tableEnsured = false;
+async function ensureTable() {
+  if (tableEnsured) return;
+  try {
+    await (db as any).staffPayment.findFirst({ select: { id: true } });
+    tableEnsured = true;
+  } catch {
+    try {
+      await db.$executeRaw`
+        CREATE TABLE IF NOT EXISTS "StaffPayment" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "receiptNumber" TEXT NOT NULL UNIQUE,
+          "staffName" TEXT NOT NULL,
+          "staffRole" TEXT,
+          "userId" TEXT,
+          "amount" DOUBLE PRECISION NOT NULL,
+          "month" TEXT,
+          "paymentDate" TIMESTAMP NOT NULL,
+          "note" TEXT,
+          "isCancelled" BOOLEAN NOT NULL DEFAULT false,
+          "cancelledAt" TIMESTAMP,
+          "cancelReason" TEXT,
+          "branchId" TEXT,
+          "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+      try {
+        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_staffName_idx" ON "StaffPayment"("staffName")`;
+        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_paymentDate_idx" ON "StaffPayment"("paymentDate")`;
+        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_receiptNumber_idx" ON "StaffPayment"("receiptNumber")`;
+        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_isCancelled_idx" ON "StaffPayment"("isCancelled")`;
+        await db.$executeRaw`CREATE INDEX IF NOT EXISTS "StaffPayment_branchId_idx" ON "StaffPayment"("branchId")`;
+      } catch {}
+      tableEnsured = true;
+      console.log('StaffPayment table created successfully');
+    } catch (e: any) {
+      console.error('Failed to create StaffPayment table:', e.message);
+    }
+  }
+}
+
 // GET /api/finance/staff-payments
 export async function GET(request: NextRequest) {
   try {
     await requireAuth();
+    await ensureTable();
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const month = searchParams.get('month');
@@ -47,7 +92,7 @@ export async function GET(request: NextRequest) {
         .filter((p: any) => !p.isCancelled)
         .reduce((s: number, p: any) => s + p.amount, 0);
     } catch (err: any) {
-      console.log('StaffPayment model not found, returning empty list:', err.message);
+      console.log('StaffPayment error:', err.message);
       return NextResponse.json({ payments: [], total: 0 });
     }
 
@@ -69,7 +114,7 @@ export async function GET(request: NextRequest) {
       return {
         id: p.id,
         receiptNumber: p.receiptNumber || '',
-        userId: '',
+        userId: p.userId || '',
         userName: p.staffName,
         staffName: p.staffName,
         staffRole: p.staffRole,
@@ -101,6 +146,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
+    await ensureTable();
     const body = await request.json();
 
     let staffName = body.staffName || body.name || body.employeeName || body.staff_name || body.fullName || '';
@@ -179,7 +225,7 @@ export async function POST(request: NextRequest) {
     } catch (err: any) {
       console.error('StaffPayment model error:', err);
       return NextResponse.json(
-        { error: 'نموذج رواتب الموظفين غير موجود. يرجى تشغيل: npx prisma db push' },
+        { error: 'فشل إنشاء السجل: ' + (err.message || '') },
         { status: 500 }
       );
     }
