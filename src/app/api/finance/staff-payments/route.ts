@@ -58,7 +58,9 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId');
 
     const branchFilter = await getBranchFilter();
-    const where: any = { ...branchFilter };
+    // لا نستخدم branchFilter في Prisma where لأن StaffPayment قد لا يكون له branchId في schema المحلي
+    // بدلاً من ذلك، نفلتر يدوياً بعد جلب البيانات
+    const where: any = {};
     if (search) {
       where.OR = [
         { staffName: { contains: search } },
@@ -77,7 +79,11 @@ export async function GET(request: NextRequest) {
         orderBy: { paymentDate: 'desc' },
       });
 
-      // فلترة يدوية بـ userId إذا كان مطلوباً
+      // فلترة يدوية بالفرع (لأن branchId قد لا يكون في Prisma schema المحلي)
+      const branchIdFilter = (branchFilter as any).branchId;
+      if (branchIdFilter !== undefined) {
+        payments = payments.filter((p: any) => p.branchId === branchIdFilter);
+      }
       if (userId && userId !== 'all') {
         try {
           const userRecord = await db.user.findUnique({ where: { id: userId } });
@@ -209,6 +215,7 @@ export async function POST(request: NextRequest) {
 
     let payment: any;
     try {
+      // استخدم Prisma بدون branchId (لأن الحقل غير موجود في schema المحلي للمستخدم)
       payment = await (db as any).staffPayment.create({
         data: {
           staffName,
@@ -219,9 +226,19 @@ export async function POST(request: NextRequest) {
           note: finalNote,
           receiptNumber,
           isCancelled: false,
-          branchId: await getBranchIdForNewRecord(),
         },
       });
+
+      // أضف branchId عبر raw SQL (لأن Prisma Client قد لا يعرفه)
+      const newBranchId = await getBranchIdForNewRecord();
+      if (newBranchId) {
+        try {
+          await db.$executeRawUnsafe(
+            `UPDATE "StaffPayment" SET "branchId" = $1 WHERE "id" = $2`,
+            newBranchId, payment.id
+          );
+        } catch {}
+      }
     } catch (err: any) {
       console.error('StaffPayment model error:', err);
       return NextResponse.json(
