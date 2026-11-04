@@ -1,39 +1,1270 @@
-// أضف هذه النماذج في نهاية ملف prisma/schema.prisma
+// Prisma schema for educational institution management system
+// نظام إدارة المؤسسة التعليمية - مدرسة السلامة
 
-// ===== اعدادات النسخ الاحتياطي (Backup Settings) =====
-
-model BackupSettings {
-  id                      String   @id @default(cuid())
-  autoBackupEnabled       Boolean  @default(true)
-  frequency               String   @default("daily")
-  scheduledTime           String   @default("02:00")
-  maxBackups              Int      @default(30)
-  lastAutoBackupAt        DateTime?
-  lastManualBackupAt      DateTime?
-  lastRestoreAt           DateTime?
-  notifyOnAutoBackup      Boolean  @default(false)
-  notifyOnBackupFailure   Boolean  @default(true)
-  backupLocation          String   @default("download/backups")
-  compressBackups         Boolean  @default(false)
-  includeUploads          Boolean  @default(false)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+generator client {
+  provider = "prisma-client-js"
 }
 
-// ===== سجل النسخ الاحتياطي (Backup Log) =====
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
 
-model BackupLog {
+// ===== المستخدمون والمصادقة =====
+model User {
+  id                    String   @id @default(cuid())
+  username              String   @unique
+  password              String
+  name                  String
+  role                  String   @default("employee") // "director" | "employee"
+  roleId                String?  // مرتبط بدور مخصص
+  canManageTimetable    Boolean  @default(false) // صلاحية إدارة الجدول الزمني للموظفين
+  // السؤال السري لاسترجاع كلمة المرور
+  securityQuestion      String?
+  securityAnswer        String?
+  // الفرع الذي ينتمي إليه المستخدم (للعاملين بالفروع)
+  branchId              String?
+  branch                Branch?  @relation(fields: [branchId], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  timesheets            EmployeeTimesheet[]
+  userRole              Role?    @relation(fields: [roleId], references: [id])
+  // ===== العلاقات العكسية لوحدة الأهداف والأداء =====
+  assignedGoals         Goal[]
+  approvedGoals         Goal[]   @relation("ApprovedByUser")
+  goalUpdates           GoalUpdate[] @relation("GoalUpdateAuthor")
+  reviewedGoalUpdates   GoalUpdate[] @relation("GoalUpdateReviewer")
+  goalReviews           GoalReview[]
+  correctiveActions     CorrectiveAction[]
+}
+
+// ===== الفروع (Branches) =====
+model Branch {
   id          String   @id @default(cuid())
-  type        String
-  filename    String
-  size        Int
-  status      String   @default("success")
-  errorMessage String?
-  userId      String?
+  name        String   @unique        // اسم الفرع
+  code        String?  @unique        // رمز الفرع (BR1, BR2, BR3)
+  receiptPrefix String?              // بادئة رقم الوصل (X, Y, Z) — لتمييز الوصولات
+  address     String?
+  phone       String?
+  email       String?
+  managerName String?                 // اسم مسؤول الفرع
+  isActive    Boolean  @default(true) // فرع نشط/معطّل
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users         User[]
+  students      Student[]
+  teachers      Teacher[]
+  payments      StudentPayment[]
+  expenses      Expense[]
+  attendances   Attendance[]
+  tasks         Task[]
+  registrations Registration[]
+  documents     Document[]
+  exams         Exam[]
+  leads         Lead[]
+  // ===== العلاقات العكسية لوحدة الجدول الأسبوعي =====
+  rooms             Room[]
+  groups            Group[]
+  subjects          Subject[]
+  timeSlots         TimeSlot[]
+  holidays          Holiday[]
+  workSettings      WorkSettings[]
+  timetableSessions TimetableSession[]
+  jobApplications   JobApplication[]
+  uploadedFiles     UploadedFile[]
+  otherIncomes      OtherIncome[]
+  // ===== العلاقات العكسية لوحدة الأهداف والأداء =====
+  goalPlans         GoalPlan[]
+  goals             Goal[]
+}
+
+// ===== الأقسام والشعب =====
+model Department {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  code            String?          // رمز القسم
+  description     String?
+  isFixed         Boolean          @default(false) // الأقسام الستة الثابتة
+  hasInstallments Boolean          @default(false) // قسم التقني سامي = true (30 شهر)
+  installmentMonths Int?           // عدد أشهر الأقساط (30 للتقني سامي)
+  defaultMonthlyAmount Float?     // القسط الشهري الافتراضي
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  students        Student[]
+  teachers        Teacher[]
+  courses         Course[]
+  specializations Specialization[]
+  groups          Group[]
+  subjects        Subject[]
+  exams           Exam[]
+  goals           Goal[]
+}
+
+// ===== التخصصات (الشعب) =====
+model Specialization {
+  id          String   @id @default(cuid())
+  name        String   // اسم التخصص/الشعبة
+  departmentId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  department  Department @relation(fields: [departmentId], references: [id])
+  students    Student[]
+  groups      Group[]
+  subjects    Subject[]
+}
+
+// ===== المستويات =====
+model Level {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  students    Student[]
+  courses     Course[]
+  exams       Exam[]
+}
+
+// ===== المواد/الدورات =====
+model Course {
+  id            String      @id @default(cuid())
+  name          String
+  code          String?
+  departmentId  String?
+  levelId       String?
+  teacherId     String?
+  price         Float       @default(0) // تكلفة الدورة
+  duration      Int?        // المدة بالساعات
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  department    Department? @relation(fields: [departmentId], references: [id])
+  level         Level?      @relation(fields: [levelId], references: [id])
+  teacher       Teacher?    @relation(fields: [teacherId], references: [id])
+  attendances   Attendance[]
+  exams         Exam[]
+}
+
+// ===== الأساتذة =====
+model Teacher {
+  id            String           @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  gender        String?          // "ذكر" | "أنثى"
+  specialty     String?          // التخصص
+  departmentId  String?
+  salary        Float            @default(0) // الراتب الشهري
+  hireDate      DateTime?
+  status        String           @default("active") // "active" | "inactive"
+  branchId      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  department    Department?      @relation(fields: [departmentId], references: [id])
+  branch        Branch?          @relation(fields: [branchId], references: [id])
+  courses       Course[]
+  attendances   Attendance[]
+  payments      TeacherPayment[]
+  subjects      Subject[]
+  sessions      TimetableSession[]
+}
+
+// ===== الطلاب =====
+model Student {
+  id              String            @id @default(cuid())
+  studentNumber   String?           // الرقم الجامعي / رقم التسجيل
+  name            String            // الاسم واللقب
+  email           String?
+  phone           String?
+  gender          String?           // "ذكر" | "أنثى"
+  birthDate       DateTime?
+  address         String?
+  photoUrl        String?           // صورة الطالب
+  // البيانات الأكاديمية
+  departmentId    String?
+  levelId         String?
+  specializationId String?          // التخصص (الشعبة) - مرتبط بقسم معين
+  section         String?           // الشعبة (نص حر للتوافق القديم)
+  college         String?           // الكلية/الجامعة
+  specialty       String?           // التخصص (نص حر للتوافق القديم)
+  courseStartDate DateTime?         // تاريخ بداية الدورة (لحساب الأقساط الشهرية)
+  totalAmount     Float?            // المبلغ الإجمالي الذي يجب دفعه خلال 30 شهر (للتقني سامي)
+  initialPayment  Float?            // الدفعة الأولية المدفوعة (تُخصم من المبلغ الإجمالي)
+  registrationDate DateTime        @default(now()) // تاريخ التسجيل
+  status          String            @default("registered") // "registered" | "continuing" | "abandoned" | "postponed" | "graduated"
+  // مستندات الملف (للأقسام: اللغات، الدورات النسوية، الدورات التأهيلية)
+  docPhotos       Boolean           @default(false) // 02 صور
+  docBirthCert    Boolean           @default(false) // شهادة ميلاد
+  docIdCard       Boolean           @default(false) // نسخة من بطاقة التعريف
+  // مستندات ملف التقني سامي (TS)
+  docTsPhotos     Boolean           @default(false) // 04 صور
+  docTsBirthCerts Boolean           @default(false) // 03 شهادات ميلاد
+  docTsIdCards    Boolean           @default(false) // 03 نسخ من بطاقة التعريف
+  docSchoolCert   Boolean           @default(false) // شهادة مدرسية أصلية
+  docMedicalCert  Boolean           @default(false) // شهادة طبية
+  // مستندات الدورات الطبية (MED)
+  docPracticalTraining  Boolean  @default(false) // التربص التطبيقي
+  practicalStartDate    DateTime? // تاريخ بداية التربص
+  practicalEndDate      DateTime? // تاريخ نهاية التربص
+  docCertificateReceived Boolean  @default(false) // استلم الشهادة
+  certificateReceivedDate DateTime? // تاريخ استلام الشهادة
+  // حقول الدعم المدرسي (SUPPORT)
+  schoolName        String?  // المؤسسة
+  educationLevel    String?  // الطور: ابتدائي | متوسط | ثانوي
+  schoolStream      String?  // الشعبة: علوم تجريبية | رياضيات | تقني رياضي | تسيير واقتصاد | لغات | آداب وفلسفة | طرائق
+  schoolYear        String?  // السنة: الأولى | الثانية | الثالثة | الرابعة | الخامسة | السادسة
+  notes           String?
+  branchId        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  department      Department?       @relation(fields: [departmentId], references: [id])
+  level           Level?            @relation(fields: [levelId], references: [id])
+  specialization  Specialization?   @relation(fields: [specializationId], references: [id])
+  branch          Branch?           @relation(fields: [branchId], references: [id])
+  attendances     Attendance[]
+  payments        StudentPayment[]
+  registrations   Registration[]
+  installments    InstallmentPlan[]
+  InstallmentV2     Installment[]
+  PaymentV2         Payment[]
+  grades          Grade[]
+  documents       Document[]
+
+  // ===== Database indexes for performance =====
+  @@index([branchId, status])
+  @@index([departmentId])
+  @@index([studentNumber])
+  @@index([registrationDate])
+  @@index([phone])
+}
+
+// ===== جدول أقساط التقني سامي (30 شهر) =====
+model InstallmentPlan {
+  id              String   @id @default(cuid())
+  studentId       String
+  monthNumber     Int      // رقم الشهر (1 إلى 30)
+  expectedAmount  Float    // المبلغ المطلوب
+  paidAmount      Float    @default(0) // المبلغ المدفوع
+  remainingAmount Float    @default(0) // المبلغ المتبقي
+  expectedDate    DateTime // تاريخ الاستحقاق المخطط
+  paidDate        DateTime? // تاريخ الدفع الفعلي
+  status          String   @default("pending") // "pending" | "due" | "paid" | "partial" | "late" | "rescheduled" | "cancelled"
+  isOverdue       Boolean  @default(false) // هل القسط متأخر
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payments        StudentPayment[] @relation("PaymentToInstallment")
+  allocations     PaymentAllocation[]
+
+  @@index([studentId, status])
+  @@index([expectedDate])
+  @@index([status, isOverdue])
+}
+
+// ===== توزيع المدفوعات (Payment Allocations) =====
+// يتبع كيفية توزيع كل دفعة على الأقساط (دفعة واحدة قد تُوزّع على عدة أقساط)
+model PaymentAllocation {
+  id            String   @id @default(cuid())
+  paymentId     String
+  installmentId String
+  amount        Float    // المبلغ المخصص لهذا القسط
+  createdAt     DateTime @default(now())
+
+  payment       StudentPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installment   InstallmentPlan @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([installmentId])
+}
+
+// ===== التسجيلات في الدورات =====
+model Registration {
+  id          String   @id @default(cuid())
+  studentId   String
+  courseId    String?
+  courseName  String   // اسم الدورة (مباشرة لتسهيل الاستيراد)
+  level       String?  // المستوى
+  specialty   String?  // التخصص
+  date        DateTime @default(now())
+  note        String?
+  photoUrl    String?  // صورة المتربص (مسار الصورة المرفقة)
+  branchId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  student     Student  @relation(fields: [studentId], references: [id])
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+}
+
+// ===== الحضور =====
+model Attendance {
+  id              String   @id @default(cuid())
+  date            DateTime
+  courseId        String?
+  courseName      String   // المادة (مباشرة ليتوافق مع ملف Excel)
+  level           String?  // المستوى
+  startTime       String?  // وقت البداية (HH:MM) - إجباري لحساب المدة
+  endTime         String?  // وقت النهاية (HH:MM) - إجباري لحساب المدة
+  timeSlot        String?  // التوقيت (نص حر للعرض - يُملأ تلقائياً من startTime/endTime)
+  teacherId       String?
+  teacherName     String?  // الأستاذ (مباشرة)
+  totalCount      Int      @default(0) // عدد الحضور الإجمالي
+  maleCount       Int      @default(0) // ذكر
+  femaleCount     Int      @default(0) // أنثى
+  durationMinutes Int      @default(0) // المدة بالدقائق (تُحسب تلقائياً من startTime و endTime)
+  unpaidCount     Int      @default(0) // لم يدفع
+  notes           String?
+  studentId       String?
+  branchId        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  course          Course?  @relation(fields: [courseId], references: [id])
+  teacher         Teacher? @relation(fields: [teacherId], references: [id])
+  student         Student? @relation(fields: [studentId], references: [id])
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+
+  // ===== Database indexes for performance =====
+  @@index([date, branchId])
+  @@index([studentId, date])
+  @@index([teacherId])
+  @@index([courseId])
+}
+
+// ===== المهام (متابعة المهام) =====
+model Task {
+  id           String   @id @default(cuid())
+  title        String   // المهام
+  priority     String   @default("medium") // الأولوية: "high" | "medium" | "low" (عالي/متوسط/منخفض)
+  priorityLabel String? // عالي، متوسط، منخفض (نص عربي)
+  responsible  String?  // المسؤول
+  startDate    DateTime? // تاريخ البدأ
+  deadline     DateTime? // الأجال
+  completed    Boolean  @default(false) // إكتمال
+  status       String   @default("pending") // الحالة: pending/in_progress/done
+  statusValue  Int      @default(0) // قيمة رقمية للحالة (لمطابقة Excel)
+  notes        String?  // ملاحظات
+  branchId     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  branch       Branch?  @relation(fields: [branchId], references: [id])
+
+  // ===== Database indexes for performance =====
+  @@index([branchId, completed])
+  @@index([deadline])
+  @@index([status])
+}
+
+// ===== مدفوعات الطلاب (الأقساط) =====
+model StudentPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل
+  studentId     String
+  amount        Float    // المبلغ المدفوع
+  paymentType   String   @default("installment") // "registration" | "installment" | "full" | "additional" | "refund"
+  paymentLabel  String?  // "تسجيل" | "قسط أول" | "قسط ثاني" | ...
+  paymentDate   DateTime // تاريخ الدفع
+  paymentMethod String?  // "cash" | "transfer" | "cheque" | "card" | "other"
+  installmentId String?  // رابط مع قسط محدد
+  notes         String?
+  branchId      String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false) // هل تم شطب الوصل
+  cancelledAt   DateTime? // تاريخ الشطب
+  cancelReason  String?  // سبب الشطب
+  // ===== حقول العكس (Reversal — مرادف للشطب في نظام الأقساط) =====
+  isReversed    Boolean  @default(false) // هل تم عكس الدفعة
+  reversedAt    DateTime? // تاريخ العكس
+  reversedBy    String?  // اسم الموظف الذي عكسها
+  reversalReason String? // سبب العكس (مثل "تعديل يدوي لجدول الأقساط")
+  // ===== حقول إضافية للنظام =====
+  receivedBy    String?  // معرّف المستخدم الذي استلم الدفعة
+  receivedByName String? // اسم المستخدم الذي استلم الدفعة
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  student       Student  @relation(fields: [studentId], references: [id])
+  installment   InstallmentPlan? @relation("PaymentToInstallment", fields: [installmentId], references: [id])
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+  // العلاقة مع جدول توزيع المدفوعات (PaymentAllocation)
+  allocations   PaymentAllocation[]
+
+  // ===== Database indexes for performance =====
+  @@index([paymentDate, branchId])
+  @@index([studentId])
+  @@index([installmentId])
+  @@index([receiptNumber])
+  @@index([isCancelled])
+}
+
+// ===== مدفوعات الأساتذة (الرواتب) =====
+model TeacherPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique
+  teacherId     String
+  amount        Float    // المبلغ المدفوع
+  month         String   // الشهر: "2024-01"
+  paymentDate   DateTime
+  paymentType   String   @default("salary") // "salary" | "bonus" | "advance"
+  paymentLabel  String?  // "راتب" | "منحة" | "سلفة"
+  notes         String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  // ===== حقول التتبع (من سجّل الوصل ومتى) =====
+  receivedBy    String?  // معرّف المستخدم الذي سجّل الوصل
+  receivedByName String? // اسم المستخدم الذي سجّل الوصل
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  teacher       Teacher  @relation(fields: [teacherId], references: [id])
+
+  // ===== Database indexes for performance =====
+  @@index([teacherId])
+  @@index([paymentDate])
+  @@index([isCancelled])
+}
+
+// ===== المصاريف الثانوية =====
+model Expense {
+  id          String   @id @default(cuid())
+  date        DateTime                       // تاريخ المصروف
+  type        String                         // نوع المصروف: "إيجار" | "كهرباء" | "ماء" | "قرطاسية" | "صيانة" | "إنترنت" | "نقل" | "ضيافة" | "أخرى"
+  description String?                        // وصف/ملاحظات
+  amount      Float                          // المبلغ
+  branchId    String?
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled Boolean  @default(false)
+  cancelledAt DateTime?
+  cancelReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch? @relation(fields: [branchId], references: [id])
+
+  // ===== Database indexes for performance =====
+  @@index([date, branchId])
+  @@index([type])
+  @@index([isCancelled])
+}
+
+// ===== إعدادات النظام =====
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ===== وحدة الجدول الأسبوعي (Timetable Module) =====
+
+// القاعات
+model Room {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String?  // رقم القاعة
+  capacity    Int      @default(30)
+  type        String   @default("classroom") // "classroom" | "lab" | "computer_lab" | "amphitheater"
+  building    String?
+  floor       String?
+  notes       String?
+  branchId    String?  // الفرع الذي تنتمي إليه القاعة
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sessions    TimetableSession[]
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+}
+
+// الأفواج
+model Group {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  code            String?
+  departmentId    String?
+  specializationId String?
+  level           String?
+  studentCount    Int      @default(0)
+  notes           String?
+  branchId        String?  // الفرع الذي ينتمي إليه الفوج
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  department      Department? @relation(fields: [departmentId], references: [id])
+  specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  sessions        TimetableSession[]
+}
+
+// المواد (للجدول)
+model Subject {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  code            String?
+  departmentId    String?
+  specializationId String?
+  weeklyHours     Int      @default(2)
+  requiredRoomType String? // "lab" | "computer_lab" | "amphitheater" | null
+  color           String?
+  notes           String?
+  branchId        String?  // الفرع الذي تنتمي إليه المادة
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  department      Department? @relation(fields: [departmentId], references: [id])
+  specialization  Specialization? @relation(fields: [specializationId], references: [id])
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  teacherId       String?
+  teacher         Teacher? @relation(fields: [teacherId], references: [id])
+  sessions        TimetableSession[]
+}
+
+// الفترات الزمنية
+model TimeSlot {
+  id          String   @id @default(cuid())
+  name        String
+  dayOfWeek   Int      // 0=الأحد, 6=السبت
+  startTime   String   // "08:00"
+  endTime     String   // "10:00"
+  order       Int
+  branchId    String?  // الفرع الذي تنتمي إليه الفترة
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  sessions    TimetableSession[]
+}
+
+// العطل
+model Holiday {
+  id          String   @id @default(cuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  type        String   @default("holiday") // "holiday" | "exam" | "event"
+  branchId    String?  // الفرع الذي تنطبق عليه العطلة (null = كل الفروع)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+}
+
+// إعدادات الدوام
+model WorkSettings {
+  id              String   @id @default(cuid())
+  workDays        String   @default("0,1,2,3,4") // أيام العمل (مفصولة بفواصل)
+  workStartTime   String   @default("08:00")
+  workEndTime     String   @default("18:00")
+  sessionDuration Int      @default(120) // دقائق
+  breakDuration   Int      @default(15)
+  maxTeacherHoursPerWeek Int @default(20)
+  maxSessionsPerDay Int    @default(4)
+  branchId        String?  // الفرع (null = إعدادات عامة)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+}
+
+// الحصص
+model TimetableSession {
+  id          String   @id @default(cuid())
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  teacherId   String?
+  teacherName String?
+  roomId      String?
+  roomName    String?
+  groupId     String?
+  groupName   String?
+  subjectId   String?
+  subjectName String?
+  notes       String?
+  color       String?
+  branchId    String?  // الفرع الذي تنتمي إليه الحصة
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  teacher     Teacher? @relation(fields: [teacherId], references: [id])
+  room        Room?    @relation(fields: [roomId], references: [id])
+  group       Group?   @relation(fields: [groupId], references: [id])
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+  timeSlot    TimeSlot? @relation(fields: [timeSlotId], references: [id])
+  timeSlotId  String?
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([dayOfWeek, branchId])
+}
+
+// ===== حضور الموظفين (Employee Timesheet) =====
+model EmployeeTimesheet {
+  id            String    @id @default(cuid())
+  userId        String   // المرتبط بحساب المستخدم
+  date          DateTime // التاريخ
+  dayOfWeek     Int      // 0=الأحد, 6=السبت
+  // الفترة الأولى
+  checkIn1      String?  // دخول (HH:MM)
+  checkOut1     String?  // خروج (HH:MM)
+  // الفترة الثانية
+  checkIn2      String?  // دخول (HH:MM)
+  checkOut2     String?  // خروج (HH:MM)
+  // الساعات المحسوبة
+  totalHours    Float    @default(0) // إجمالي الساعات
+  regularHours  Float    @default(0) // الساعات العادية
+  overtimeHours Float    @default(0) // الوقت الإضافي
+  sickHours     Float    @default(0) // عطلة مرضية
+  leaveHours    Float    @default(0) // عطلة
+  // الحالة
+  status        String   @default("present") // "present" | "absent" | "sick" | "leave" | "holiday"
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===== الامتحانات والدرجات (Exams Module) =====
+
+// الامتحانات
+model Exam {
+  id            String   @id @default(cuid())
+  title         String   // عنوان الامتحان
+  examDate      DateTime // تاريخ الامتحان
+  maxScore      Float    @default(20) // العلامة القصوى (مثلاً 20)
+  passingScore  Float    @default(10) // علامة النجاح
+  weight        Float    @default(1) // معامل الامتحان
+  term          String   @default("first") // الفصل: "first" | "second" | "final"
+  status        String   @default("scheduled") // "scheduled" | "completed" | "cancelled"
+  departmentId  String?
+  levelId       String?
+  courseId      String?
+  notes         String?
+  branchId      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  department    Department? @relation(fields: [departmentId], references: [id])
+  level         Level?      @relation(fields: [levelId], references: [id])
+  course        Course?     @relation(fields: [courseId], references: [id])
+  branch        Branch?     @relation(fields: [branchId], references: [id])
+  grades        Grade[]
+}
+
+// درجات الطلاب في الامتحانات
+model Grade {
+  id          String   @id @default(cuid())
+  examId      String
+  studentId   String
+  score       Float?   // الدرجة (null = لم يُدخل بعد)
+  isAbsent    Boolean  @default(false) // غائب
+  isExcused   Boolean  @default(false) // غياب مبرر
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, studentId])
+}
+
+// ===== نظام إدارة العملاء المحتملين (CRM) =====
+model Lead {
+  id              String   @id @default(cuid())
+  fullName        String
+  phone           String
+  phone2          String?
+  email           String?
+  gender          String?  // "ذكر" | "أنثى"
+  birthDate       DateTime?
+  wilaya          String?
+  baladia         String?
+  address         String?
+  source          String   @default("أخرى") // مصدر العميل
+  desiredCourse   String?  // التخصص المطلوب
+  desiredBranch   String?  // الفرع
+  assignedTo      String?  // الموظف المسؤول
+  firstContactDate DateTime @default(now())
+  lastFollowUpDate DateTime?
+  nextFollowUpDate DateTime?
+  status          String   @default("new") // new, contacted, interested, waiting, appointment, registered, rejected, no_answer, postponed
+  interestLevel   String   @default("medium") // low, medium, high
+  notes           String?
+  // التحويل لطالب
+  convertedToStudentId String?
+  convertedAt     DateTime?
+  // آخر تعديل
+  lastModifiedBy  String?
+  branchId        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  followUps       LeadFollowUp[]
+}
+
+model LeadFollowUp {
+  id              String   @id @default(cuid())
+  leadId          String
+  date            DateTime @default(now())
+  userName        String   // الموظف
+  contactType     String   // call, whatsapp, visit, email
+  notes           String?
+  result          String?  // نتيجة المتابعة
+  nextFollowUpDate DateTime?
+  createdAt       DateTime @default(now())
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ===== وحدة المساعد الذكي (AI Assistant) =====
+
+model AIConversation {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String   @default("محادثة جديدة")
+  pinned      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  messages    AIMessage[]
+
+  @@index([userId])
+}
+
+model AIMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  role            String
+  content         String
+  messageType     String   @default("text")
+  metadata        String?
+  feedback        String?
+  feedbackNote    String?
+  provider        String?
+  tokensUsed      Int      @default(0)
+  durationMs      Int      @default(0)
+  createdAt       DateTime @default(now())
+  conversation    AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
   userName    String?
+  action      String
+  targetType  String?
+  targetId    String?
+  details     String?
+  source      String   @default("manual")
+  status      String   @default("success")
+  ipAddress   String?
   createdAt   DateTime @default(now())
 
-  @@index([type])
-  @@index([status])
+  @@index([userId])
+  @@index([action])
+}
+
+// ===== وحدة الواتساب (WhatsApp Module) =====
+
+model WhatsAppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  updatedAt   DateTime @updatedAt
+}
+
+model WhatsAppTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  type        String   // "installment_reminder" | "attendance_alert" | "announcement" | "registration" | "custom"
+  subject     String?
+  body        String
+  variables   String?  // JSON: قائمة المتغيرات المتاحة
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WhatsAppLog {
+  id          String   @id @default(cuid())
+  recipientName   String
+  recipientPhone  String
+  message     String
+  templateName    String?
+  status      String   // "sent" | "failed" | "pending" | "link_generated"
+  provider    String   // "wame" | "callmebot" | "greenapi"
+  errorMessage    String?
+  sentBy      String?
+  createdAt   DateTime @default(now())
+
   @@index([createdAt])
+  @@index([status])
+}
+
+// ===== مركز الإشعارات + التقويم الزمني =====
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String?  // null = للجميع
+  title       String
+  message     String
+  type        String   // "info" | "warning" | "success" | "danger"
+  category    String   // "student" | "finance" | "attendance" | "task" | "system" | "general"
+  link        String?  // رابط للقسم المعني
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        String   // "exam" | "holiday" | "meeting" | "payment" | "event" | "deadline"
+  startDate   DateTime
+  endDate     DateTime?
+  color       String   @default("#0f766e")
+  location    String?
+  departmentId String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([startDate])
+  @@index([type])
+}
+
+// ===== نظام الصلاحيات الشامل (RBAC) =====
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) // الأدوار الافتراضية لا يمكن حذفها
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  permissions RolePermission[]
+}
+
+model RolePermission {
+  id          String   @id @default(cuid())
+  roleId      String
+  section     String   // اسم القسم: "students", "finance", "notifications", إلخ
+  canView     Boolean  @default(false)
+  canCreate   Boolean  @default(false)
+  canEdit     Boolean  @default(false)
+  canDelete   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  role        Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, section])
+  @@index([roleId])
+}
+
+// إضافة حقل roleId لنموذج User (علاقة بالدور)
+// ملاحظة: نضيف الحقل لـ User الموجود
+
+// ===== قسم الأرشيف (Documents Archive) =====
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  type        String   // "birth_cert" | "id_card" | "school_cert" | "photo" | "medical" | "contract" | "diploma" | "other"
+  studentId   String?
+  studentName String?  // اسم الطالب (نص حر للتوافق)
+  fileName    String   // اسم الملف الأصلي
+  filePath    String   // مسار الملف
+  fileSize    Int      // الحجم بالبايت
+  mimeType    String   // نوع الملف
+  description String?
+  tags        String?  // وسوم مفصولة بفواصل
+  uploadedBy  String?
+  branchId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([studentId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ===== سجل التغييرات (Activity Log) =====
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  userName    String?
+  action      String   // "create" | "update" | "delete" | "login" | "logout" | "export" | "import" | "print"
+  module      String   // "students" | "finance" | "attendance" | "users" | "system" | إلخ
+  description String
+  targetType  String?  // نوع الكيان المتأثر: "student" | "teacher" | "payment" | إلخ
+  targetId    String?  // معرف الكيان
+  details     String?  // JSON: تفاصيل إضافية (القيم القديمة/الجديدة)
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([module])
+  @@index([createdAt])
+}
+
+// ============================================
+// ===== نظام الأقساط المالي المحترف =====
+// ============================================
+
+// ===== خطط الدفع (Payment Plans) =====
+// نموذج مرن يسمح بتحديد خطة دفع مختلفة لكل تخصص أو تسجيل طالب
+
+// ===== خطط دفع الطلاب (Student Payment Plans) =====
+// ربط الطالب بخطة دفع محددة مع حفظ لقطة من القيم وقت التسجيل
+
+// ===== توزيع المدفوعات (Payment Allocations) =====
+// يتبع كيفية توزيع كل دفعة على الأقساط
+
+// ===== عكس المدفوعات (Payment Reversals) =====
+// سجل تدقيق لعمليات عكس الدفعات (لا تُحذف الدفعات، بل تُعكس)
+
+// ============================================
+// ===== نظام الأقساط المالية V2 =====
+// ============================================
+
+// ===== خطط الدفع =====
+model PaymentPlan {
+  id              String   @id @default(cuid())
+  name            String   // اسم خطة الدفع
+  description     String?
+  totalAmount     Float    // المبلغ الإجمالي
+  monthsCount     Int      // عدد الأشهر
+  monthlyAmount   Float    // القسط الشهري (محسوب تلقائياً)
+  startDate       DateTime // تاريخ بداية الأقساط
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  installments    Installment[]
+
+  @@index([active])
+}
+
+// ===== الأقساط =====
+model Installment {
+  id              String   @id @default(cuid())
+  paymentPlanId   String   // رابط مع خطة الدفع
+  studentId       String   // رابط مع الطالب
+  amount          Float    // مبلغ القسط
+  installmentNumber Int     // رقم القسط (1, 2, 3...)
+  dueDate         DateTime  // تاريخ الاستحقاق
+  status          String   @default("PENDING") // PENDING | DUE | OVERDUE | PAID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  paymentPlan     PaymentPlan @relation(fields: [paymentPlanId], references: [id], onDelete: Cascade)
+  student         Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  payment         Payment?
+
+  @@index([paymentPlanId])
+  @@index([studentId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ===== الدفعات =====
+model Payment {
+  id              String   @id @default(cuid())
+  installmentId   String   @unique // رابط مع قسط واحد (unique)
+  studentId       String   // رابط مع الطالب
+  amountPaid      Float    // المبلغ المدفوع
+  paymentDate     DateTime // تاريخ الدفع
+  paymentMethod   String   @default("cash") // cash | transfer | cheque | card
+  receiptNumber   String   // رقم الوصل
+  createdAt       DateTime @default(now())
+
+  installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  student         Student     @relation(fields: [studentId], references: [id])
+
+  @@index([studentId])
+  @@index([receiptNumber])
+  @@index([paymentDate])
+}
+
+// ===== الرسائل الداخلية =====
+model Message {
+  id           String   @id @default(cuid())
+  senderId     String
+  senderName   String?
+  senderRole   String?
+  recipientId  String?  // null = رسالة جماعية للمدير
+  recipientName String?
+  subject      String
+  content      String
+  priority     String   @default("normal") // "low" | "normal" | "high" | "urgent"
+  isRead       Boolean  @default(false)
+  readAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([recipientId, isRead])
+  @@index([senderId])
+}
+
+// ===== مدفوعات الموظفين (الرواتب) =====
+// تُستخدم لتسجيل رواتب الموظفين (غير الأساتذة) — متممة لـ TeacherPayment
+model StaffPayment {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل (مثال: STF-5001)
+  staffName     String   // اسم الموظف
+  staffRole     String?  // وظيفة الموظف (مثال: "مدير", "موظف استقبال")
+  userId        String?  // رابط اختياري بجدول User (لو الموظف له حساب)
+  amount        Float    // المبلغ المدفوع
+  month         String?  // الشهر: "2024-01"
+  paymentDate   DateTime // تاريخ الدفع
+  note          String?  // ملاحظات مركّبة: "paymentLabel - (type) - notes"
+  // ===== حقول الشطب (Cancellation) =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // ===== Database indexes for performance =====
+  @@index([staffName])
+  @@index([paymentDate])
+  @@index([receiptNumber])
+  @@index([isCancelled])
+}
+
+// ===== طلبات العمل (Job Applications) =====
+model JobApplication {
+  id          String   @id @default(cuid())
+  name        String   // الاسم واللقب
+  birthDate   DateTime? // تاريخ الميلاد
+  phone       String?  // رقم الهاتف
+  email       String?  // الايميل
+  whatsapp    String?  // الوتس اب
+  diploma     String?  // الدبلوم
+  experience  String?  // الخبرة
+  address     String?  // العنوان
+  note        String?  // ملاحظة
+  cvUrl       String?  // رابط ملف السيرة الذاتية
+  diplomaUrl  String?  // رابط ملف الدبلوم
+  status      String   @default("pending") // pending | reviewed | accepted | rejected
+  branchId    String?  // الفرع
+  appliedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([status])
+  @@index([appliedAt])
+}
+
+// ===== تخزين الملفات في قاعدة البيانات (works on Vercel) =====
+// بدلاً من الكتابة على القرص (read-only على Vercel)، نخزّن الملفات في DB
+model UploadedFile {
+  id         String   @id @default(cuid())
+  content    Bytes    // محتوى الملف (binary)
+  fileName   String   // اسم الملف الأصلي
+  mimeType   String?  // نوع MIME (image/jpeg, application/pdf, ...)
+  size       Int      // حجم الملف بالبايت
+  branchId   String?  // الفرع
+  createdAt  DateTime @default(now())
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([createdAt])
+}
+
+// ============================================
+// ===== وحدة الأهداف وإدارة الأداء =====
+// ===== Goals & Performance Management =====
+// ============================================
+
+// ===== خطط الأهداف (Goal Plans) =====
+// خطة سنوية/ربعية/شهرية تجمع عدة أهداف تحت مظلتها
+model GoalPlan {
+  id          String   @id @default(cuid())
+  name        String   // اسم الخطة (مثال: "خطة 2027")
+  description String?
+  periodType  String   @default("annual") // "annual" | "semi-annual" | "quarterly" | "monthly" | "custom"
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("draft") // "draft" | "active" | "archived"
+  branchId    String?  // الفرع (null = المؤسسة ككل)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  goals       Goal[]
+
+  @@index([branchId])
+  @@index([status])
+  @@index([periodType])
+  @@index([startDate])
+}
+
+// ===== الأهداف الفردية (Goals) =====
+model Goal {
+  id              String   @id @default(cuid())
+  title           String   // عنوان الهدف
+  description     String?  // الوصف التفصيلي
+  // مستوى الهدف: مؤسسة / فرع / قسم / موظف
+  level           String   @default("employee") // "institution" | "branch" | "department" | "employee"
+  planId          String?  // الخطة المرتبطة (اختياري)
+  parentGoalId    String?  // الهدف الأب للدعم الهرمي للأهداف الفرعية
+  branchId        String?  // الفرع
+  departmentId    String?  // القسم
+  assignedTo      String?  // معرّف المستخدم المسؤول
+  category        String?  // فئة الهدف (أكاديمي، مالي، تشغيلي...)
+  priority        String   @default("medium") // "low" | "medium" | "high" | "critical"
+  weight          Float    @default(0) // وزن الهدف في الخطة (0-100)
+  baseline        Float    @default(0) // القيمة الأساسية (نقطة الانطلاق)
+  target          Float    @default(100) // القيمة المستهدفة
+  actual          Float    @default(0) // القيمة الفعلية الحالية
+  unit            String   @default("percentage") // "count" | "percentage" | "currency" | "hours" | "courses" | "boolean"
+  direction       String   @default("higher-is-better") // "higher-is-better" | "lower-is-better"
+  progressMethod  String   @default("formula") // "formula" | "milestones" | "manual"
+  dataSource      String   @default("manual") // "manual" | "auto"
+  autoMetric      String?  // معرّف تلقائي للحساب (مثل: "total_students")
+  startDate       DateTime?
+  dueDate         DateTime?
+  status          String   @default("draft") // "draft" | "pending-approval" | "active" | "on-hold" | "completed" | "cancelled" | "overdue"
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  approvedById    String?  // المستخدم الذي اعتمد الهدف
+  approvedAt      DateTime?
+
+  // ===== العلاقات =====
+  plan            GoalPlan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
+  parentGoal      Goal?           @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  subGoals        Goal[]          @relation("GoalHierarchy")
+  branch          Branch?         @relation(fields: [branchId], references: [id])
+  department      Department?     @relation(fields: [departmentId], references: [id])
+  assignedToUser  User?           @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+  approvedBy      User?           @relation("ApprovedByUser", fields: [approvedById], references: [id], onDelete: SetNull)
+  milestones      GoalMilestone[]
+  updates         GoalUpdate[]
+  reviews         GoalReview[]
+  correctiveActions CorrectiveAction[]
+
+  // ===== فهارس الأداء =====
+  @@index([branchId])
+  @@index([departmentId])
+  @@index([assignedTo])
+  @@index([planId])
+  @@index([parentGoalId])
+  @@index([status])
+  @@index([level])
+  @@index([priority])
+  @@index([dueDate])
+}
+
+// ===== المعالم/المهام الفرعية للأهداف (Milestones) =====
+model GoalMilestone {
+  id          String    @id @default(cuid())
+  goalId      String
+  title       String
+  description String?
+  weight      Float     @default(0) // وزن المعلم في إجمالي الهدف (0-100)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([completed])
+}
+
+// ===== تحديثات التقدم (Progress Updates) =====
+model GoalUpdate {
+  id            String    @id @default(cuid())
+  goalId        String
+  userId        String    // المستخدم الذي قام بالتحديث
+  actualValue   Float     @default(0) // القيمة الجديدة الفعلية
+  previousValue Float     @default(0) // القيمة السابقة
+  notes         String?   // ملاحظات التحديث
+  evidenceUrl   String?   // رابط دليل/إثبات
+  status        String    @default("submitted") // "draft" | "submitted" | "approved" | "rejected"
+  submittedAt   DateTime  @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewNotes   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  goal          Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user          User      @relation("GoalUpdateAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy    User?     @relation("GoalUpdateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([userId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+// ===== المراجعات الدورية (Reviews) =====
+model GoalReview {
+  id           String   @id @default(cuid())
+  goalId       String
+  reviewerId   String   // المستخدم الذي قام بالمراجعة
+  reviewType   String   @default("self") // "self" | "manager" | "final"
+  period       String?  // الفترة المراجعة (مثال: "2027-Q1")
+  rating       Float    @default(0) // التقييم (0-5 أو 0-100)
+  achievements String?  // الإنجازات
+  challenges   String?  // التحديات
+  nextSteps    String?  // الخطوات القادمة
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  goal         Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  reviewer     User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([goalId])
+  @@index([reviewerId])
+  @@index([reviewType])
+  @@index([createdAt])
+}
+
+// ===== الإجراءات التصحيحية (Corrective Actions) =====
+// للأهداف المتعثرة لإطلاق خطة تصحيحية
+model CorrectiveAction {
+  id          String    @id @default(cuid())
+  goalId      String
+  description String    // وصف الإجراء
+  rootCause   String?   // السبب الجذري للمشكلة
+  action      String?   // الإجراء المطلوب اتخاذه
+  assignedTo  String?   // المستخدم المسؤول عن الإجراء
+  startDate   DateTime?
+  dueDate     DateTime?
+  status      String    @default("open") // "open" | "in-progress" | "completed"
+  result      String?   // النتيجة بعد التنفيذ
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  goal        Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  assignee    User?     @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ===== مداخيل أخرى (Other Income) =====
+// إيجار القاعات، دورات خارجية، وغيرها من المداخيل غير المرتبطة بالطلاب
+model OtherIncome {
+  id            String   @id @default(cuid())
+  receiptNumber String   @unique // رقم الوصل
+  source        String   // مصدر المدخل: "إيجار قاعات" | "دورات خارجية" | "تبرعات" | "أخرى"
+  description   String?  // وصف/ملاحظات
+  amount        Float    // المبلغ
+  date          DateTime // تاريخ المدخل
+  branchId      String?  // الفرع
+  // ===== حقول الشطب =====
+  isCancelled   Boolean  @default(false)
+  cancelledAt   DateTime?
+  cancelReason  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  branch        Branch?  @relation(fields: [branchId], references: [id])
+
+  @@index([date, branchId])
+  @@index([source])
+  @@index([isCancelled])
 }
