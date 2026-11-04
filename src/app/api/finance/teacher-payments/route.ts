@@ -3,10 +3,41 @@ import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
 import { getBranchIdForNewRecord, getBranchFilter } from '@/lib/branch-filter';
 
+// ===== Auto-add receivedBy/receivedByName columns if missing =====
+let columnsEnsured = false;
+async function ensureColumns() {
+  if (columnsEnsured) return;
+  try {
+    // تحقق من وجود العمودين، وأضفهما إذا لم يكونا موجودين
+    for (const col of ['receivedBy', 'receivedByName']) {
+      try {
+        await db.$queryRawUnsafe(`SELECT "${col}" FROM "TeacherPayment" LIMIT 1`);
+      } catch {
+        console.log(`Adding ${col} column to TeacherPayment...`);
+        try {
+          await db.$executeRawUnsafe(`ALTER TABLE "TeacherPayment" ADD COLUMN IF NOT EXISTS "${col}" TEXT`);
+          console.log(`${col} column added.`);
+        } catch (e: any) {
+          try {
+            await db.$executeRawUnsafe(`ALTER TABLE "TeacherPayment" ADD COLUMN "${col}" TEXT`);
+          } catch (e2: any) {
+            console.log(`${col} might already exist:`, e2.message);
+          }
+        }
+      }
+    }
+    columnsEnsured = true;
+  } catch (e: any) {
+    console.error('ensureColumns error:', e.message);
+    columnsEnsured = true;
+  }
+}
+
 // GET /api/finance/teacher-payments - director only
 export async function GET(request: NextRequest) {
   try {
     await requireDirector();
+    await ensureColumns();
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -54,7 +85,8 @@ export async function GET(request: NextRequest) {
 // POST /api/finance/teacher-payments - director only
 export async function POST(request: NextRequest) {
   try {
-    await requireDirector();
+    const user = await requireDirector();
+    await ensureColumns();
 
     const body = await request.json();
 
@@ -76,7 +108,8 @@ export async function POST(request: NextRequest) {
     }
     const receiptNumber = `${receiptPrefix}-${counter}`;
 
-    const payment = await db.teacherPayment.create({
+    // أنشئ بالحقول الأساسية أولاً
+    let payment: any = await db.teacherPayment.create({
       data: {
         receiptNumber,
         teacherId: body.teacherId,
@@ -89,6 +122,14 @@ export async function POST(request: NextRequest) {
       },
       include: { teacher: { include: { department: true } } },
     });
+
+    // أضف receivedBy/receivedByName عبر raw SQL (لأن Prisma قد لا يعرفهما محلياً)
+    try {
+      await db.$executeRaw`UPDATE "TeacherPayment" SET "receivedBy" = ${user.id}, "receivedByName" = ${user.name} WHERE "id" = ${payment.id}`;
+      payment = { ...payment, receivedBy: user.id, receivedByName: user.name };
+    } catch (e: any) {
+      console.error('Failed to set receivedBy on TeacherPayment:', e.message);
+    }
 
     return NextResponse.json({ payment }, { status: 201 });
   } catch (error: any) {
