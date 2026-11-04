@@ -25,6 +25,15 @@ const formatDate = (iso: string | Date) => {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
+// Stable datetime formatter — DD/MM/YYYY HH:MM (24h)
+const formatDateTime = (iso: string | Date | null | undefined) => {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 interface StudentPayment {
   id: string;
   receiptNumber: string;
@@ -34,6 +43,10 @@ interface StudentPayment {
   paymentDate: string;
   paymentMethod: string | null;
   notes: string | null;
+  receivedBy?: string | null;
+  receivedByName?: string | null;
+  createdAt?: string;
+  studentId?: string;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -46,6 +59,9 @@ interface TeacherPayment {
   paymentLabel: string | null;
   paymentDate: string;
   notes: string | null;
+  receivedBy?: string | null;
+  receivedByName?: string | null;
+  createdAt?: string;
   teacher: { id: string; name: string; department?: { name: string } };
 }
 
@@ -1116,56 +1132,77 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
 
           {/* Table */}
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            <div style={{ minWidth: '720px' }}>
-              {/* Header */}
-              <div
-                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
-                style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
-              >
-                <div className="text-right">رقم الوصل</div>
-                <div className="text-right">التاريخ</div>
-                <div className="text-right">الطالب</div>
-                <div className="text-center">النوع</div>
-                <div className="text-center">المبلغ</div>
-                <div className="text-center">طباعة</div>
-              </div>
-              {/* Body */}
-              {loading ? (
-                <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
-              ) : filteredPayments.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
-              ) : filteredPayments.map(p => (
-                <div
-                  key={p.id}
-                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
-                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
-                >
-                  <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
-                  <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
-                  <div className="text-right font-medium">{p.student?.name || '-'}</div>
-                  <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
-                  <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
-                  <div className="text-center">
-                    <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')}>
-                      <Printer className="w-4 h-4 ml-1" /> طباعة
-                    </Button>
+            {/* gridTemplateColumns differs for director (with وقت التسجيل + المسجِّل) vs employee */}
+            {(() => {
+              const gridCols = isDirector
+                ? '130px 110px 1fr 110px 120px 140px 120px 100px'
+                : '130px 110px 1fr 110px 120px 100px';
+              const minWidth = isDirector ? '960px' : '720px';
+              return (
+                <div style={{ minWidth }}>
+                  {/* Header */}
+                  <div
+                    className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                    style={{ gridTemplateColumns: gridCols }}
+                  >
+                    <div className="text-right">رقم الوصل</div>
+                    <div className="text-right">التاريخ</div>
+                    <div className="text-right">الطالب</div>
+                    <div className="text-center">النوع</div>
+                    <div className="text-center">المبلغ</div>
+                    {isDirector && <div className="text-center">وقت التسجيل</div>}
+                    {isDirector && <div className="text-center">المسجِّل</div>}
+                    <div className="text-center">طباعة</div>
                   </div>
+                  {/* Body */}
+                  {loading ? (
+                    <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
+                  ) : filteredPayments.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
+                  ) : filteredPayments.map(p => (
+                    <div
+                      key={p.id}
+                      className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                      style={{ gridTemplateColumns: gridCols }}
+                    >
+                      <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
+                      <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
+                      <div className="text-right font-medium">{p.student?.name || '-'}</div>
+                      <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
+                      <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
+                      {isDirector && (
+                        <div className="text-center num text-xs text-muted-foreground" dir="ltr">
+                          {formatDateTime(p.createdAt)}
+                        </div>
+                      )}
+                      {isDirector && (
+                        <div className="text-center text-xs font-medium">{p.receivedByName || '-'}</div>
+                      )}
+                      <div className="text-center">
+                        <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')}>
+                          <Printer className="w-4 h-4 ml-1" /> طباعة
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Footer totals */}
+                  {filteredPayments.length > 0 && (
+                    <div
+                      className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
+                      style={{ gridTemplateColumns: gridCols }}
+                    >
+                      <div style={{ gridColumn: isDirector ? '1 / span 5' : '1 / span 4' }} className="text-left">
+                        الإجمالي ({filteredPayments.length} وصل):
+                      </div>
+                      <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
+                      {isDirector && <div></div>}
+                      {isDirector && <div></div>}
+                      <div></div>
+                    </div>
+                  )}
                 </div>
-              ))}
-              {/* Footer totals */}
-              {filteredPayments.length > 0 && (
-                <div
-                  className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
-                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
-                >
-                  <div style={{ gridColumn: '1 / span 4' }} className="text-left">
-                    الإجمالي ({filteredPayments.length} وصل):
-                  </div>
-                  <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
-                  <div></div>
-                </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
@@ -1175,41 +1212,60 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
         <CardHeader><CardTitle className="text-lg">وصولات الأساتذة - للطباعة</CardTitle></CardHeader>
         <CardContent className="p-0">
           <div className="max-h-96 overflow-y-auto">
-            <div style={{ minWidth: '640px' }}>
-              {/* Header */}
-              <div
-                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
-                style={{ gridTemplateColumns: '130px 110px 1fr 120px 100px' }}
-              >
-                <div className="text-right">رقم الوصل</div>
-                <div className="text-right">التاريخ</div>
-                <div className="text-right">الأستاذ</div>
-                <div className="text-center">المبلغ</div>
-                <div className="text-center">طباعة</div>
-              </div>
-              {/* Body */}
-              {loading ? (
-                <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
-              ) : recentTeacherPayments.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
-              ) : recentTeacherPayments.map(p => (
-                <div
-                  key={p.id}
-                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
-                  style={{ gridTemplateColumns: '130px 110px 1fr 120px 100px' }}
-                >
-                  <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
-                  <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
-                  <div className="text-right font-medium">{p.teacher.name}</div>
-                  <div className="text-center num font-bold text-red-700">{currency(p.amount)}</div>
-                  <div className="text-center">
-                    <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=teacher`, '_blank')}>
-                      <Printer className="w-4 h-4 ml-1" /> طباعة
-                    </Button>
+            {/* المدير يرى وقت التسجيل + المسجِّل أيضاً في وصولات الأساتذة */}
+            {(() => {
+              const gridCols = isDirector
+                ? '130px 110px 1fr 120px 140px 120px 100px'
+                : '130px 110px 1fr 120px 100px';
+              const minWidth = isDirector ? '900px' : '640px';
+              return (
+                <div style={{ minWidth }}>
+                  {/* Header */}
+                  <div
+                    className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                    style={{ gridTemplateColumns: gridCols }}
+                  >
+                    <div className="text-right">رقم الوصل</div>
+                    <div className="text-right">التاريخ</div>
+                    <div className="text-right">الأستاذ</div>
+                    <div className="text-center">المبلغ</div>
+                    {isDirector && <div className="text-center">وقت التسجيل</div>}
+                    {isDirector && <div className="text-center">المسجِّل</div>}
+                    <div className="text-center">طباعة</div>
                   </div>
+                  {/* Body */}
+                  {loading ? (
+                    <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
+                  ) : recentTeacherPayments.length === 0 ? (
+                    <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
+                  ) : recentTeacherPayments.map(p => (
+                    <div
+                      key={p.id}
+                      className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                      style={{ gridTemplateColumns: gridCols }}
+                    >
+                      <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
+                      <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
+                      <div className="text-right font-medium">{p.teacher.name}</div>
+                      <div className="text-center num font-bold text-red-700">{currency(p.amount)}</div>
+                      {isDirector && (
+                        <div className="text-center num text-xs text-muted-foreground" dir="ltr">
+                          {formatDateTime(p.createdAt)}
+                        </div>
+                      )}
+                      {isDirector && (
+                        <div className="text-center text-xs font-medium">{p.receivedByName || '-'}</div>
+                      )}
+                      <div className="text-center">
+                        <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=teacher`, '_blank')}>
+                          <Printer className="w-4 h-4 ml-1" /> طباعة
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
