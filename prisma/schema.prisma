@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -411,6 +411,9 @@ model TeacherPayment {
   isCancelled   Boolean  @default(false)
   cancelledAt   DateTime?
   cancelReason  String?
+  // ===== حقول التتبع (من سجّل الوصل ومتى) =====
+  receivedBy    String?  // معرّف المستخدم الذي سجّل الوصل
+  receivedByName String? // اسم المستخدم الذي سجّل الوصل
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   teacher       Teacher  @relation(fields: [teacherId], references: [id])
