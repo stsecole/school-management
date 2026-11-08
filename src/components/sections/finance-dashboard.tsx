@@ -12,20 +12,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Trash2, Download, Printer, Wallet, TrendingUp, TrendingDown,
-  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, Ban,
+  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, Ban, RotateCcw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const currency = (n: number) => new Intl.NumberFormat('ar-DZ', { style: 'currency', currency: 'DZD', maximumFractionDigits: 0 }).format(n);
 
-// Stable date formatter — uses Latin digits, DD/MM/YYYY format
 const formatDate = (iso: string | Date) => {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
-// Stable datetime formatter — DD/MM/YYYY HH:MM (24h)
 const formatDateTime = (iso: string | Date | null | undefined) => {
   if (!iso) return '-';
   const d = new Date(iso);
@@ -997,6 +995,26 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
     }
   };
 
+  // ===== نزع الشطب (إرجاع الوصل المشطب) =====
+  const handleUncancelPayment = async (id: string, type: 'student' | 'teacher') => {
+    if (!confirm('إرجاع الشطب؟ سيتم تفعيل الوصل مرة أخرى.')) return;
+    try {
+      const res = await fetch(`/api/finance/cancel/${type}/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'uncancel' }),
+      });
+      if (res.ok) {
+        loadData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert('فشل إرجاع الشطب: ' + (data.error || ''));
+      }
+    } catch (e) {
+      alert('خطأ في الاتصال');
+    }
+  };
+
   const selectedStudent = filterStudent !== 'all'
     ? students.find(s => s.id === filterStudent)
     : null;
@@ -1089,6 +1107,11 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
                               <Ban className="w-4 h-4 text-red-600" />
                             </Button>
                           )}
+                          {isDirector && p.isCancelled && (
+                            <Button size="sm" variant="ghost" onClick={() => handleUncancelPayment(p.id, 'student')} title="نزع الشطب" className="h-8 px-2 hover:bg-green-50">
+                              <RotateCcw className="w-4 h-4 text-green-600" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1143,6 +1166,11 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
                           {isDirector && !p.isCancelled && (
                             <Button size="sm" variant="ghost" onClick={() => handleCancelPayment(p.id, 'teacher')} title="شطب الوصل" className="h-8 px-2 hover:bg-red-50">
                               <Ban className="w-4 h-4 text-red-600" />
+                            </Button>
+                          )}
+                          {isDirector && p.isCancelled && (
+                            <Button size="sm" variant="ghost" onClick={() => handleUncancelPayment(p.id, 'teacher')} title="نزع الشطب" className="h-8 px-2 hover:bg-green-50">
+                              <RotateCcw className="w-4 h-4 text-green-600" />
                             </Button>
                           )}
                         </div>
