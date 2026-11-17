@@ -55,9 +55,39 @@ export function ActivityLogSection({ isDirector }: { isDirector: boolean }) {
   const [search, setSearch] = useState('');
   const [filterAction, setFilterAction] = useState('all');
   const [filterModule, setFilterModule] = useState('all');
+  const [filterUser, setFilterUser] = useState('all');
+  const [users, setUsers] = useState<{ id: string; name: string; username: string }[]>([]);
   const [page, setPage] = useState(0);
   const pageSize = 50;
   const { toast } = useToast();
+
+  // Fetch users list for the filter dropdown
+  useEffect(() => {
+    fetch('/api/users')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.users) {
+          setUsers(data.users.map((u: any) => ({ id: u.id, name: u.name, username: u.username })));
+        }
+      })
+      .catch(() => {
+        // Non-director or error — will fall back to extracting users from logs
+      });
+  }, []);
+
+  // Build a dynamic user list from loaded logs (fallback when /api/users is not accessible)
+  const usersFromLogs = (() => {
+    const map = new Map<string, { id: string; name: string; username: string }>();
+    for (const l of logs) {
+      if (l.userId && l.userName && !map.has(l.userId)) {
+        map.set(l.userId, { id: l.userId, name: l.userName, username: l.userName });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  // Merge: prefer /api/users list; if empty, use users extracted from logs
+  const availableUsers = users.length > 0 ? users : usersFromLogs;
 
   const load = async () => {
     setLoading(true);
@@ -69,6 +99,7 @@ export function ActivityLogSection({ isDirector }: { isDirector: boolean }) {
       if (search) params.set('search', search);
       if (filterAction !== 'all') params.set('action', filterAction);
       if (filterModule !== 'all') params.set('module', filterModule);
+      if (filterUser !== 'all') params.set('userId', filterUser);
 
       const res = await fetch(`/api/activity-log?${params.toString()}`);
       const data = await res.json();
@@ -84,7 +115,7 @@ export function ActivityLogSection({ isDirector }: { isDirector: boolean }) {
   useEffect(() => {
     const timer = setTimeout(() => load(), 300);
     return () => clearTimeout(timer);
-  }, [search, filterAction, filterModule, page]);
+  }, [search, filterAction, filterModule, filterUser, page]);
 
   const handleClearOld = async () => {
     if (!confirm('Delete logs older than 90 days?')) return;
@@ -179,6 +210,17 @@ export function ActivityLogSection({ isDirector }: { isDirector: boolean }) {
           <option value="all">كل الأقسام</option>
           {Object.entries(moduleLabels).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <select
+          value={filterUser}
+          onChange={(e) => { setFilterUser(e.target.value); setPage(0); }}
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          title="فلترة حسب المستخدم"
+        >
+          <option value="all">كل المستخدمين</option>
+          {availableUsers.map(u => (
+            <option key={u.id} value={u.id}>{u.name}</option>
           ))}
         </select>
         <Button variant="outline" size="sm" onClick={load}>

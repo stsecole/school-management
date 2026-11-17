@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 // POST /api/finance/student-payments
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const user = await requireAuth();
 
     const body = await request.json();
 
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       create: { key: 'receipt_counter', value: String(counter) },
     });
     // Capture branch ID once (outside transaction — cookies() can't be awaited in tx)
-   
+    const newBranchId = await getBranchIdForNewRecord();
 
     // Get branch receipt prefix (e.g., X, Y, Z) — if no branch, use 'W' (default)
     let receiptPrefix = 'W';
@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
           installmentId: body.installmentId || null,
           notes: body.notes || null,
           branchId: newBranchId,
+          receivedBy: user.id,
+          receivedByName: user.name,
         },
         include: { student: true },
       });
