@@ -21,6 +21,7 @@ interface Attendance {
   startTime: string | null;
   endTime: string | null;
   timeSlot: string | null;
+  teacherId: string | null;
   teacherName: string | null;
   totalCount: number;
   maleCount: number;
@@ -30,7 +31,7 @@ interface Attendance {
   notes: string | null;
 }
 
-interface Teacher { id: string; name: string; }
+interface Teacher { id: string; name: string; specialty?: string | null; departmentId?: string | null; }
 interface Course { id: string; name: string; }
 interface Level { id: string; name: string; }
 interface Department { id: string; name: string; }
@@ -659,18 +660,59 @@ export function AttendanceSection() {
     setEditing(a);
     // Strip the [QR:...] prefix from notes for display (kept internally for student list)
     const cleanNotes = (a.notes || '').replace(/\[QR:[^\]]*\]\s*/g, '');
+
+    // ===== Resolve teacher / department / specialization from teacher record =====
+    // The Attendance table stores teacherName (free text) and teacherId only.
+    // We match by teacherId (preferred) or by teacherName (fallback) against the
+    // teachers list, then read departmentId from the teacher record and load
+    // the matching specializations. We also try to match courseName against a
+    // specialization name to pre-select the right one.
+    const matchedTeacher =
+      teachers.find(t => t.id === a.teacherId) ||
+      teachers.find(t => (t.name || '').trim() === (a.teacherName || '').trim()) ||
+      null;
+    const deptId = matchedTeacher?.departmentId || '';
+    const teacherId = a.teacherId || matchedTeacher?.id || '';
+
     setFormData({
       date: a.date.split('T')[0],
       courseId: '', courseName: a.courseName, level: a.level || '',
-      departmentId: '', specializationId: '',
+      departmentId: deptId, specializationId: '',
       startTime: a.startTime || '08:00',
       endTime: a.endTime || '10:00',
-      teacherId: '', teacherName: a.teacherName || '',
+      teacherId, teacherName: a.teacherName || '',
       totalCount: String(a.totalCount), maleCount: String(a.maleCount),
       femaleCount: String(a.femaleCount),
       unpaidCount: String(a.unpaidCount), notes: cleanNotes,
     });
-    setDialogSpecializations([]);
+
+    // Load specializations for the resolved department, then try to match
+    // the existing courseName against a specialization to pre-select it.
+    let loadedSpecs: Specialization[] = [];
+    if (deptId) {
+      try {
+        const res = await fetch(`/api/specializations?departmentId=${deptId}`);
+        const data = await res.json();
+        loadedSpecs = data.specializations || [];
+      } catch {
+        loadedSpecs = [];
+      }
+    }
+    setDialogSpecializations(loadedSpecs);
+
+    // Match courseName against specialization name. courseName may look like
+    // "دروس الدعم المدرسي - إنجليزية" → take the part after the last " - "
+    // and try to match it against a specialization name.
+    const courseTail = (a.courseName || '').split(' - ').pop()?.trim() || '';
+    const matchedSpec = courseTail
+      ? loadedSpecs.find(s => (s.name || '').trim() === courseTail) ||
+        loadedSpecs.find(s => (s.name || '').includes(courseTail)) ||
+        loadedSpecs.find(s => courseTail.includes(s.name || ''))
+      : null;
+    if (matchedSpec) {
+      setFormData(prev => ({ ...prev, specializationId: matchedSpec.id }));
+    }
+
     setScannedStudents([]);
     setScanning(false);
     setScanError(null);
