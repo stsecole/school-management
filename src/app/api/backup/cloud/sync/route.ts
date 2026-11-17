@@ -31,6 +31,67 @@ async function updateSyncStatus(status: 'success' | 'error', error: string = '')
   });
 }
 
+/**
+ * تحديد مسار ملف قاعدة البيانات الفعلي من DATABASE_URL أولاً ثم المرشحات الاحتياطية.
+ * مهم على Vercel حيث قد تعيش قاعدة البيانات في /tmp وليس في db/custom.db داخل الحزمة.
+ * يعيد أول مرشح موجود وحجمه أكبر من صفر؛ وإلا المرشح الأول لإنتاج خطأ واضح.
+ */
+async function resolveDbPath(): Promise<string> {
+  const candidates: string[] = [];
+  const url = process.env.DATABASE_URL || '';
+  if (url.startsWith('file:')) {
+    let p = url.slice('file:'.length).split('?')[0].trim();
+    if (p) {
+      if (path.isAbsolute(p)) {
+        candidates.push(path.normalize(p));
+      } else {
+        // Prisma يحل المسارات النسبية بالنسبة لمجلد prisma (موقع schema.prisma)
+        candidates.push(path.join(process.cwd(), 'prisma', p));
+        candidates.push(path.join(process.cwd(), p));
+      }
+    }
+  }
+  candidates.push(path.join(process.cwd(), 'db', 'custom.db'));
+  candidates.push(path.join(process.cwd(), 'prisma', 'db', 'custom.db'));
+
+  for (const c of candidates) {
+    try {
+      const st = await fs.stat(c);
+      if (st.isFile() && st.size > 0) return c;
+    } catch {}
+  }
+  return candidates[0];
+}
+
+/** ترجمة أخطاء Telegram API الشائعة إلى رسائل عربية مع خطوات الحل */
+function telegramErrorHint(description: string): string {
+  const d = description || '';
+  if (d.includes('Unauthorized') || d.includes('401')) {
+    return 'التوكن غير صحيح. تأكد من نسخه كاملاً من @BotFather بدون مسافات زائدة.';
+  }
+  if (d.includes('chat not found')) {
+    return 'لم يتم العثور على المحادثة: أرسل رسالة للبوت أولاً (Start)، وإذا كانت قناة فأضف البوت كمشرف، وتحقق من chat_id عبر getUpdates.';
+  }
+  if (d.includes('bot was blocked')) {
+    return 'البوت محظور من قبل المستخدم. أعد تفعيله عبر Start.';
+  }
+  if (d.includes('not enough rights')) {
+    return 'البوت لا يملك صلاحية الإرسال. أضفه كمشرف في القناة/المجموعة بصلاحية Post Messages.';
+  }
+  return '';
+}
+
+/** استخراج وصف خطأ واضح من استجابة Telegram API */
+async function telegramError(res: Response): Promise<string> {
+  let description = `HTTP ${res.status}`;
+  try {
+    const data = await res.json();
+    if (data?.description) description = data.description;
+  } catch {}
+  const hint = telegramErrorHint(description);
+  return `Telegram API error (${description})${hint ? `\n🔧 الحل: ${hint}` : ''}`;
+}
+
 async function sendToTelegram(token: string, chatId: string, dbBuffer: Buffer, filename: string, branchLabel: string = 'main'): Promise<void> {
   // Telegram Bot API: sendDocument
   // Use FormData with Blob (Node 18+)
@@ -46,12 +107,11 @@ async function sendToTelegram(token: string, chatId: string, dbBuffer: Buffer, f
     body: formData,
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Telegram API error ${res.status}: ${text}`);
+    throw new Error(await telegramError(res));
   }
   const data = await res.json();
   if (!data.ok) {
-    throw new Error(`Telegram API error: ${data.description || 'unknown'}`);
+    throw new Error(await telegramError(new Response(JSON.stringify(data), { status: 500 })));
   }
 }
 
@@ -216,13 +276,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Read DB file
-    const dbPath = path.join(process.cwd(), 'db', 'custom.db');
+    // Read DB file — يبدأ من DATABASE_URL الفعلي (مهم على Vercel حيث قد تكون القاعدة في /tmp)
+    const dbPath = await resolveDbPath();
     let dbBuffer: Buffer;
     try {
       dbBuffer = await fs.readFile(dbPath);
     } catch (e: any) {
-      throw new Error('قاعدة البيانات غير موجودة: ' + e.message);
+      throw new Error(`قاعدة البيانات غير موجودة عند المسار: ${dbPath} (${e.message}). تأكد من إعداد DATABASE_URL بشكل صحيح.`);
     }
 
     const now = new Date();

@@ -1,177 +1,130 @@
 // ===== POST /api/backup/cloud/test =====
-// يختبر الإعدادات بدون إرسال قاعدة البيانات الفعلية (للتحقق من الاتصال)
+// اختبار إعدادات المزود السحابي قبل الحفظ/المزامنة
+// Telegram: تحقق من التوكن عبر getMe ثم أرسل رسالة اختبار عبر sendMessage
+// Webhook: POST بسيط للتحقق من الاستجابة
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
-import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
 
-async function getGoogleAccessToken(serviceAccountJson: any): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iss: serviceAccountJson.client_email,
-    scope: 'https://www.googleapis.com/auth/drive.file',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const toSign = `${encodedHeader}.${encodedPayload}`;
-  const sign = crypto.createSign('RSA-SHA256');
-  sign.update(toSign);
-  let privateKey: string = serviceAccountJson.private_key;
-  if (typeof privateKey !== 'string') {
-    throw new Error('private_key ليس نصاً صحيحاً');
+/** ترجمة أخطاء Telegram API الشائعة إلى رسائل عربية مع خطوات الحل */
+function telegramErrorHint(status: number, description: string): string {
+  const d = description || '';
+  if (status === 401 || d.includes('Unauthorized')) {
+    return 'التوكن غير صحيح. تأكد من نسخ التوكن كاملاً من @BotFather (بالصيغة 123456:ABC-xxx) بدون مسافات زائدة في البداية أو النهاية.';
   }
-  privateKey = privateKey.replace(/\\n/g, '\n');
-  privateKey = privateKey.replace(/\\\\n/g, '\n');
-  const pemMarker = String.fromCharCode(45,45,45,45,45,66,69,71,73,78,32,80,82,73,86,65,84,69,32,75,69,89,45,45,45,45,45);
-  if (!privateKey.includes(pemMarker)) {
-    throw new Error('private_key لا يحتوي على PEM header الصحيح');
+  if (d.includes('chat not found')) {
+    return 'لم يتم العثور على المحادثة. الحل: (1) افتح البوت في Telegram واضغط Start وأرسل أي رسالة أولاً. (2) إذا كان chat_id يبدأ بـ -100 (قناة/مجموعة خارقة) أو @اسم قناة، تأكد من إضافة البوت كمشرف (Admin) فيها. (3) اجلب chat_id الصحيح من رابط getUpdates بعد مراسلة البوت.';
   }
-  const signature = sign.sign(privateKey, 'base64url');
-  const jwt = `${toSign}.${signature}`;
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok || !data.access_token) {
-    const errMsg = data.error_description || data.error || JSON.stringify(data);
-    if (data.error === 'invalid_grant' && errMsg.includes('Invalid JWT Signature')) {
-      throw new Error(`Invalid JWT Signature — المفتاح الخاص تالف. أعد تنزيل JSON من Google Cloud Console.`);
-    }
-    throw new Error(`Google auth failed: ${errMsg}`);
+  if (d.includes('bot was blocked')) {
+    return 'البوت محظور من قبل المستخدم. افتح البوت واضغط "إلغاء الحظر" ثم أرسل Start.';
   }
-  return data.access_token;
+  if (d.includes('group chat was upgraded')) {
+    return 'تم تحويل المجموعة إلى مجموعة خارقة (Supergroup). اجلب chat_id الجديد من getUpdates وحدّث الإعدادات.';
+  }
+  if (d.includes('not enough rights') || d.includes('CHAT_ADMIN_PRIVILEGES')) {
+    return 'البوت لا يملك صلاحية إرسال الرسائل. أضف البوت كمشرف في القناة/المجموعة مع تفعيل صلاحية "إرسال الرسائل" (Post Messages).';
+  }
+  if (d.includes('chat_id is empty')) {
+    return 'chat_id فارغ أو غير صالح. أدخل معرف المحادثة (رقم موجب للمحادثة الخاصة، سالب للمجموعة، أو @اسم القناة العامة).';
+  }
+  return '';
 }
 
 export async function POST(request: NextRequest) {
   try {
     await requireDirector();
-    const body = await request.json();
-    const provider = body.provider || 'none';
-    const token = body.token || '';
-    const chatId = body.chatId || '';
-    const webhookUrl = body.webhookUrl || '';
-    const gdriveSa = body.gdriveSa || '';
-    const gdriveFolderId = body.gdriveFolderId || '';
+    const body = await request.json().catch(() => ({}));
+    const provider = body.provider || 'telegram';
 
     if (provider === 'telegram') {
+      // استخدام القيم المُرسلة، والرجوع للإعدادات المحفوظة إن كانت فارغة
+      let token = String(body.token || '').trim();
+      let chatId = String(body.chatId || '').trim();
       if (!token || !chatId) {
-        return NextResponse.json({ ok: false, error: 'نقص في الإعدادات: token أو chat_id' }, { status: 400 });
+        const [tRow, cRow] = await Promise.all([
+          db.setting.findUnique({ where: { key: 'cloud_backup_telegram_token' } }),
+          db.setting.findUnique({ where: { key: 'cloud_backup_telegram_chat_id' } }),
+        ]);
+        if (!token) token = (tRow?.value || '').trim();
+        if (!chatId) chatId = (cRow?.value || '').trim();
       }
-      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `✅ اختبار النسخ الاحتياطي السحابي - ${new Date().toLocaleString('en-GB')}`,
-        }),
+
+      if (!token) {
+        return NextResponse.json({ ok: false, error: 'التوكن فارغ. أنشئ بوتاً عبر @BotFather وانسخ التوكن في الحقل المخصص.' }, { status: 400 });
+      }
+      if (!chatId) {
+        return NextResponse.json({ ok: false, error: 'chat_id فارغ. أرسل رسالة للبوت ثم افتح https://api.telegram.org/bot<TOKEN>/getUpdates وانسخ معرف المحادثة (chat.id).' }, { status: 400 });
+      }
+
+      // الخطوة 1: التحقق من التوكن عبر getMe
+      let meRes: Response;
+      try {
+        meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`, { cache: 'no-store' });
+      } catch (e: any) {
+        return NextResponse.json({ ok: false, error: 'تعذر الوصول إلى Telegram API: ' + (e.message || '') + ' — تحقق من اتصال الخادم بالإنترنت.' }, { status: 502 });
+      }
+      const me = await meRes.json().catch(() => null);
+      if (!me?.ok) {
+        const desc = me?.description || `HTTP ${meRes.status}`;
+        const hint = telegramErrorHint(meRes.status, desc);
+        return NextResponse.json({ ok: false, error: `فشل التحقق من التوكن: ${desc}${hint ? '\n🔧 الحل: ' + hint : ''}` }, { status: 400 });
+      }
+
+      // الخطوة 2: إرسال رسالة اختبار إلى المحادثة
+      let sendRes: Response;
+      try {
+        sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: '✅ اختبار النسخ الاحتياطي: الاتصال يعمل بنجاح.\nسيتم إرسال نسخ قاعدة البيانات إلى هذه المحادثة عند المزامنة.',
+          }),
+        });
+      } catch (e: any) {
+        return NextResponse.json({ ok: false, error: `التوكن صحيح (البوت: ${me.result?.first_name || ''}) لكن تعذر إرسال رسالة الاختبار: ${e.message || ''}` }, { status: 502 });
+      }
+      const send = await sendRes.json().catch(() => null);
+      if (!send?.ok) {
+        const desc = send?.description || `HTTP ${sendRes.status}`;
+        const hint = telegramErrorHint(sendRes.status, desc);
+        return NextResponse.json({ ok: false, error: `التوكن صحيح (البوت: ${me.result?.first_name || ''}) لكن فشل الإرسال إلى chat_id=${chatId}:\n${desc}${hint ? '\n🔧 الحل: ' + hint : ''}` }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: `✅ الاتصال بـ Telegram يعمل!\n🤖 البوت: ${me.result?.first_name || ''} (@${me.result?.username || ''})\n💬 تم إرسال رسالة اختبار إلى: ${chatId}\nافتح Telegram للتأكد من وصولها.`,
       });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        return NextResponse.json({
-          ok: false,
-          error: `Telegram error: ${data.description || res.statusText}`,
-        }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, message: 'تم إرسال رسالة اختبار إلى Telegram بنجاح' });
     }
 
     if (provider === 'webhook') {
-      if (!webhookUrl) {
-        return NextResponse.json({ ok: false, error: 'Webhook URL غير مُكوَّن' }, { status: 400 });
+      const url = String(body.webhookUrl || '').trim();
+      if (!url) {
+        return NextResponse.json({ ok: false, error: 'Webhook URL فارغ.' }, { status: 400 });
       }
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          test: true,
-          source: 'school-management-system',
-          timestamp: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        return NextResponse.json({
-          ok: false,
-          error: `Webhook error ${res.status}: ${text || res.statusText}`,
-        }, { status: 400 });
-      }
-      return NextResponse.json({ ok: true, message: 'تم الاتصال بالـ Webhook بنجاح' });
-    }
-
-    if (provider === 'googledrive') {
-      if (!gdriveSa) {
-        return NextResponse.json({ ok: false, error: 'Service Account JSON غير مُكوَّن' }, { status: 400 });
-      }
-      let saJson: any;
       try {
-        saJson = JSON.parse(gdriveSa);
-      } catch (e: any) {
-        return NextResponse.json({ ok: false, error: 'صيغة JSON غير صحيحة: ' + e.message }, { status: 400 });
-      }
-      if (!saJson.client_email || !saJson.private_key) {
-        return NextResponse.json({ ok: false, error: 'JSON غير مكتمل (يجب أن يحتوي على client_email و private_key)' }, { status: 400 });
-      }
-      let accessToken: string;
-      try {
-        accessToken = await getGoogleAccessToken(saJson);
-      } catch (e: any) {
-        return NextResponse.json({ ok: false, error: 'فشل الاتصال بـ Google: ' + e.message }, { status: 400 });
-      }
-      let folderInfo = '';
-      if (gdriveFolderId) {
-        try {
-          const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files/${gdriveFolderId}?fields=id,name,mimeType`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-          });
-          if (folderRes.ok) {
-            const folderData = await folderRes.json();
-            folderInfo = ` (المجلد: "${folderData.name}")`;
-            if (folderData.mimeType !== 'application/vnd.google-apps.folder') {
-              return NextResponse.json({ ok: false, error: 'المعرّف ليس مجلداً' }, { status: 400 });
-            }
-          } else {
-            const errData = await folderRes.json().catch(() => ({}));
-            const errorCode = errData.error?.errors?.[0]?.reason || '';
-            let hint = '';
-            if (errorCode === 'notFound' || errData.error?.code === 404) {
-              hint = `\n\n🔧 الحل:\n1. افتح Google Drive في المتصفح\n2. اضغط يميناً على المجلد → "مشاركة"\n3. الصق هذا البريد: ${saJson.client_email}\n4. اختر "محرر"\n5. اضغط "إرسال"`;
-            } else if (errData.error?.code === 403) {
-              hint = `\n\n🔧 الحل: تأكد من مشاركة المجلد مع: ${saJson.client_email}`;
-            }
-            return NextResponse.json({
-              ok: false,
-              error: `تعذر الوصول للمجلد: ${errData.error?.message || ''}${hint}`,
-              clientEmail: saJson.client_email,
-            }, { status: 400 });
-          }
-        } catch (e: any) {
-          return NextResponse.json({ ok: false, error: 'خطأ في فحص المجلد: ' + e.message }, { status: 400 });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test: true, source: 'school-management-system', timestamp: new Date().toISOString() }),
+        });
+        if (!res.ok) {
+          return NextResponse.json({ ok: false, error: `Webhook استجاب برمز HTTP ${res.status} — تحقق من صحة الرابط.` }, { status: 400 });
         }
+        return NextResponse.json({ ok: true, message: `✅ Webhook استجاب بنجاح (HTTP ${res.status}).` });
+      } catch (e: any) {
+        return NextResponse.json({ ok: false, error: 'تعذر الوصول إلى Webhook: ' + (e.message || '') }, { status: 502 });
       }
-      return NextResponse.json({
-        ok: true,
-        message: `تم الاتصال بـ Google Drive بنجاح${folderInfo}. البريد: ${saJson.client_email}`,
-      });
     }
 
-    return NextResponse.json({ ok: false, error: 'مزود غير مدعوم' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'اختبار Google Drive غير متاح هنا — استخدم زر "مزامنة الآن" للتجربة الفعلية.' }, { status: 400 });
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     if (error.message === 'FORBIDDEN') return NextResponse.json({ error: 'هذه العملية متاحة للمدير فقط' }, { status: 403 });
     console.error('POST /api/backup/cloud/test error:', error);
-    return NextResponse.json({ error: 'حدث خطأ: ' + (error.message || '') }, { status: 500 });
+    return NextResponse.json({ ok: false, error: 'حدث خطأ: ' + (error.message || '') }, { status: 500 });
   }
 }
