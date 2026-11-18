@@ -12,7 +12,6 @@ import {
   BarChart3, Users, GraduationCap, BookOpen, CalendarCheck, ListTodo,
   Wallet, TrendingUp, TrendingDown, Sparkles, Loader2, Award, AlertCircle,
   Building2, Trophy, AlertTriangle, Filter, Printer, Download, Search, User, X,
-  CalendarClock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
@@ -107,7 +106,9 @@ export function ReportsSection({ isDirector = false }: { isDirector?: boolean })
         setAiUsedFallback(json.usedFallback || false);
         toast({
           title: json.usedFallback ? 'تم (تحليل محلي)' : 'تم',
-          description: json.usedFallback ? 'لم يتوفر LLM، تم استخدام التحليل المحلي' : 'تم إنشاء التحليل بالذكاء الاصطناعي',
+          description: json.usedFallback
+            ? 'لم يتوفر LLM — السبب والحل مذكوران في نص التحليل بالأسفل ⬇️'
+            : 'تم إنشاء التحليل بالذكاء الاصطناعي',
         });
       } else {
         toast({ title: 'خطأ', description: json.error || 'فشل التحليل', variant: 'destructive' });
@@ -599,7 +600,7 @@ export function ReportsSection({ isDirector = false }: { isDirector?: boolean })
                 <div className="rounded-lg border bg-muted/30 p-4">
                   {aiUsedFallback && (
                     <div className="mb-3 p-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs">
-                      تنبيه: تم استخدام التحليل المحلي الاحتياطي (لم يتوفر LLM)
+                      تنبيه: تم استخدام التحليل المحلي الاحتياطي — السبب والحل مذكوران في نص التحليل أدناه ⬇️
                     </div>
                   )}
                   <div className="prose prose-sm max-w-none dark:prose-invert">
@@ -676,7 +677,9 @@ function BranchComparisonTab({ year }: { year: string }) {
         setAiUsedFallback(json.usedFallback || false);
         toast({
           title: json.usedFallback ? 'تم (تحليل محلي)' : 'تم',
-          description: json.usedFallback ? 'لم يتوفر LLM، تم استخدام التحليل المحلي' : 'تم إنشاء التحليل بالذكاء الاصطناعي',
+          description: json.usedFallback
+            ? 'لم يتوفر LLM — السبب والحل مذكوران في نص التحليل بالأسفل ⬇️'
+            : 'تم إنشاء التحليل بالذكاء الاصطناعي',
         });
       } else {
         toast({ title: 'خطأ', description: json.error || 'فشل التحليل', variant: 'destructive' });
@@ -1078,7 +1081,6 @@ function StudentFiltersTab() {
   const [absenceDays, setAbsenceDays] = useState('3');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [batchMonth, setBatchMonth] = useState('all');
 
   const load = async () => {
     setLoading(true);
@@ -1094,7 +1096,6 @@ function StudentFiltersTab() {
     if (schoolName) params.set('schoolName', schoolName);
     if (absenceFilter !== 'all') params.set('absenceFilter', absenceFilter);
     if (absenceDays) params.set('absenceDays', absenceDays);
-    if (batchMonth !== 'all') params.set('batchMonth', batchMonth);
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
 
@@ -1111,7 +1112,7 @@ function StudentFiltersTab() {
     }
   };
 
-  useEffect(() => { load(); }, [departmentId, status, gender, docFilter, practicalFilter, educationLevel, schoolStream, schoolYear, schoolName, absenceFilter, absenceDays, batchMonth, startDate, endDate]);
+  useEffect(() => { load(); }, [departmentId, status, gender, docFilter, practicalFilter, educationLevel, schoolStream, schoolYear, schoolName, absenceFilter, absenceDays, startDate, endDate]);
 
   // ===== طباعة النتائج المُفلترة =====
   const handlePrintFiltered = () => {
@@ -1351,34 +1352,6 @@ function StudentFiltersTab() {
           <div className="space-y-1">
             <Label className="text-xs text-purple-700">اسم المؤسسة</Label>
             <Input placeholder="ابحث باسم المؤسسة..." value={schoolName} onChange={(e) => setSchoolName(e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Batch Filter (التقني سامي) */}
-      <Card className="border-2 border-blue-200 bg-blue-50/20">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-blue-700">
-            <CalendarClock className="w-5 h-5" /> فلترة الدفعة (التقني سامي)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-blue-700">الدفعة (شهر/سنة)</Label>
-              <Input
-                type="month"
-                value={batchMonth === 'all' ? '' : batchMonth}
-                onChange={(e) => setBatchMonth(e.target.value || 'all')}
-                dir="ltr"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-blue-700">&nbsp;</Label>
-              <Button variant="outline" size="sm" onClick={() => setBatchMonth('all')}>
-                إظهار كل الدفعات
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>

@@ -9,6 +9,7 @@ import type {
   ProviderId,
 } from './types';
 import { DEFAULT_AI_SETTINGS, PROVIDER_DEFAULTS } from './types';
+import { fixModel } from './model-defaults';
 import { ZaiProvider } from './providers/zai';
 import { OpenAIProvider } from './providers/openai';
 import { GeminiProvider } from './providers/gemini';
@@ -45,7 +46,8 @@ export async function getAISettings(): Promise<AISettings> {
     enabled: map[SETTING_KEYS.ENABLED] !== 'false',
     provider,
     apiKey: map[SETTING_KEYS.API_KEY] || '',
-    model: map[SETTING_KEYS.MODEL] || defaults.defaultModel,
+    // تصحيح تلقائي: استبدال الموديلات الموقوفة من المزودين بالبدائل الحديثة
+    model: fixModel(provider, map[SETTING_KEYS.MODEL] || defaults.defaultModel),
     maxTokens: parseInt(map[SETTING_KEYS.MAX_TOKENS] || '2048', 10),
     temperature: parseFloat(map[SETTING_KEYS.TEMPERATURE] || '0.7'),
     baseUrl: map[SETTING_KEYS.BASE_URL] || undefined,

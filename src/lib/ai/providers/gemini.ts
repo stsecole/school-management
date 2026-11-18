@@ -23,7 +23,7 @@ export class GeminiProvider implements AIProvider {
     this.baseUrl = (
       opts.baseUrl || 'https://generativelanguage.googleapis.com/v1beta'
     ).replace(/\/$/, '');
-    this.model = opts.model || 'gemini-1.5-flash';
+    this.model = opts.model || 'gemini-2.0-flash';
   }
 
   /** تحويل رسائل OpenAI إلى صيغة Gemini (contents + systemInstruction) */
