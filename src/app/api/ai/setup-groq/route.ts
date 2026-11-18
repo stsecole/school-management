@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
 
     await db.setting.upsert({
       where: { key: 'ai_model' },
-      create: { key: 'ai_model', value: 'llama-3.1-8b-instant' },
-      update: { value: 'llama-3.1-8b-instant' },
+      create: { key: 'ai_model', value: 'llama-3.3-70b-versatile' },
+      update: { value: 'llama-3.3-70b-versatile' },
     });
 
     await db.setting.upsert({
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         enabled: true,
         provider: 'groq',
         apiKey: apiKey.substring(0, 5) + '...',
-        model: 'llama-3.1-8b-instant',
+        model: 'llama-3.3-70b-versatile',
       },
     });
   } catch (error: any) {

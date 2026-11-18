@@ -1,5 +1,13 @@
+// ===== مصنع المزودين + إدارة الإعدادات =====
 import { db } from '@/lib/db';
-import type { AIProvider, AISettings, ChatChunk, ChatRequest, ChatResponse, ProviderId } from './types';
+import type {
+  AIProvider,
+  AISettings,
+  ChatChunk,
+  ChatRequest,
+  ChatResponse,
+  ProviderId,
+} from './types';
 import { DEFAULT_AI_SETTINGS, PROVIDER_DEFAULTS } from './types';
 import { ZaiProvider } from './providers/zai';
 import { OpenAIProvider } from './providers/openai';
@@ -9,6 +17,7 @@ import { DeepSeekProvider } from './providers/deepseek';
 import { GroqProvider } from './providers/groq';
 import { LocalProvider } from './providers/local';
 
+// مفاتيح الإعدادات في جدول Setting
 export const SETTING_KEYS = {
   ENABLED: 'ai_enabled',
   PROVIDER: 'ai_provider',
@@ -19,6 +28,9 @@ export const SETTING_KEYS = {
   BASE_URL: 'ai_base_url',
 } as const;
 
+/**
+ * قراءة إعدادات الذكاء الاصطناعي من قاعدة البيانات
+ */
 export async function getAISettings(): Promise<AISettings> {
   const rows = await db.setting.findMany({
     where: { key: { in: Object.values(SETTING_KEYS) } },
@@ -40,6 +52,9 @@ export async function getAISettings(): Promise<AISettings> {
   };
 }
 
+/**
+ * حفظ إعدادات الذكاء الاصطناعي في قاعدة البيانات
+ */
 export async function saveAISettings(settings: Partial<AISettings>): Promise<void> {
   const entries: { key: string; value: string }[] = [];
   if (settings.enabled !== undefined)
@@ -66,28 +81,57 @@ export async function saveAISettings(settings: Partial<AISettings>): Promise<voi
   }
 }
 
+/**
+ * إنشاء مزود بناءً على الإعدادات
+ */
 export function createProvider(settings: AISettings): AIProvider {
-  const defaults = PROVIDER_DEFAULTS[settings.provider];
-  switch (settings.provider) {
+  const defaults = PROVIDER_DEFAULTS[settings.provider as ProviderId] || PROVIDER_DEFAULTS.local;
+  switch (settings.provider as string) {
     case 'zai':
       return new ZaiProvider();
     case 'openai':
-      return new OpenAIProvider({ apiKey: settings.apiKey, baseUrl: settings.baseUrl || defaults.baseUrl, model: settings.model });
+      return new OpenAIProvider({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.model,
+      });
     case 'gemini':
-      return new GeminiProvider({ apiKey: settings.apiKey, baseUrl: settings.baseUrl || defaults.baseUrl, model: settings.model });
+      return new GeminiProvider({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.model,
+      });
     case 'claude':
-      return new ClaudeProvider({ apiKey: settings.apiKey, baseUrl: settings.baseUrl || defaults.baseUrl, model: settings.model });
+      return new ClaudeProvider({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.model,
+      });
     case 'deepseek':
-      return new DeepSeekProvider({ apiKey: settings.apiKey, baseUrl: settings.baseUrl || defaults.baseUrl, model: settings.model });
+      return new DeepSeekProvider({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.model,
+      });
     case 'groq':
-      return new GroqProvider({ apiKey: settings.apiKey, baseUrl: settings.baseUrl || defaults.baseUrl, model: settings.model });
+      return new GroqProvider({
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || 'https://api.groq.com/openai/v1',
+        model: settings.model || 'llama-3.3-70b-versatile',
+      });
     case 'local':
     default:
       return new LocalProvider();
   }
 }
 
-export async function getActiveProvider(): Promise<{ provider: AIProvider; settings: AISettings }> {
+/**
+ * الحصول على المزود النشط
+ */
+export async function getActiveProvider(): Promise<{
+  provider: AIProvider;
+  settings: AISettings;
+}> {
   const settings = await getAISettings();
   if (!settings.enabled) {
     return { provider: new LocalProvider(), settings: { ...settings, provider: 'local' } };
@@ -96,6 +140,9 @@ export async function getActiveProvider(): Promise<{ provider: AIProvider; setti
   return { provider, settings };
 }
 
+/**
+ * محادثة غير متدفقة
+ */
 export async function chat(req: ChatRequest): Promise<ChatResponse> {
   const { provider, settings } = await getActiveProvider();
   return provider.chat({
@@ -106,6 +153,9 @@ export async function chat(req: ChatRequest): Promise<ChatResponse> {
   });
 }
 
+/**
+ * محادثة متدفقة
+ */
 export async function* chatStream(req: ChatRequest): AsyncIterable<ChatChunk> {
   const { provider, settings } = await getActiveProvider();
   yield* provider.chatStream({

@@ -3,15 +3,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
+import { CURRENT_DEFAULT_MODELS } from '@/lib/ai/model-defaults';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const PROVIDER_CONFIG: Record<string, { model: string; label: string }> = {
-  groq: { model: 'llama-3.3-70b-versatile', label: 'Groq' },
-  gemini: { model: 'gemini-1.5-flash', label: 'Google Gemini' },
-  openai: { model: 'gpt-4o-mini', label: 'OpenAI' },
-  deepseek: { model: 'deepseek-chat', label: 'DeepSeek' },
+  groq: { model: CURRENT_DEFAULT_MODELS.groq, label: 'Groq' },
+  gemini: { model: CURRENT_DEFAULT_MODELS.gemini, label: 'Google Gemini' },
+  openai: { model: CURRENT_DEFAULT_MODELS.openai, label: 'OpenAI' },
+  deepseek: { model: CURRENT_DEFAULT_MODELS.deepseek, label: 'DeepSeek' },
 };
 
 export async function POST(request: NextRequest) {

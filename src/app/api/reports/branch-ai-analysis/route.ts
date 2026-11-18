@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
+import { fixModel } from '@/lib/ai/model-defaults';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,9 @@ async function getAIConfig(): Promise<{ provider: string; apiKey: string; model:
   ]);
   const apiKey = keyRow?.value || '';
   if (!apiKey || apiKey.length < 10) return null;
-  return { provider: providerRow?.value || 'groq', apiKey, model: modelRow?.value || 'llama-3.1-8b-instant' };
+  const provider = providerRow?.value || 'groq';
+  // تصحيح تلقائي: إذا كان الموديل المحفوظ موقوفاً من المزود يُستبدل بالبديل الحديث
+  return { provider, apiKey, model: fixModel(provider, modelRow?.value || '') };
 }
 
 async function callAI(config: { provider: string; apiKey: string; model: string }, systemPrompt: string, userPrompt: string): Promise<string> {

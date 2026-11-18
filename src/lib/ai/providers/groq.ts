@@ -1,3 +1,5 @@
+// ===== مزود Groq (مجاني وسريع جداً — يعمل من الجزائر) =====
+// Groq uses OpenAI-compatible API, so we extend OpenAIProvider
 import { OpenAIProvider } from './openai';
 
 export class GroqProvider extends OpenAIProvider {
@@ -5,7 +7,7 @@ export class GroqProvider extends OpenAIProvider {
     super({
       apiKey: opts.apiKey,
       baseUrl: opts.baseUrl || 'https://api.groq.com/openai/v1',
-      model: opts.model || 'llama-3.1-8b-instant',
+      model: opts.model || 'llama-3.3-70b-versatile',
     });
   }
 }

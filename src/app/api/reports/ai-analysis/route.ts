@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
+import { fixModel, providerErrorHint } from '@/lib/ai/model-defaults';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -16,10 +17,12 @@ async function getAIConfig(): Promise<{ provider: string; apiKey: string; model:
   ]);
   const apiKey = keyRow?.value || '';
   if (!apiKey || apiKey.length < 10) return null;
+  const provider = providerRow?.value || 'groq';
   return {
-    provider: providerRow?.value || 'groq',
+    provider,
     apiKey,
-    model: modelRow?.value || 'llama-3.1-8b-instant',
+    // تصحيح تلقائي: إذا كان الموديل المحفوظ موقوفاً من المزود يُستبدل بالبديل الحديث
+    model: fixModel(provider, modelRow?.value || ''),
   };
 }
 
@@ -114,17 +117,18 @@ export async function POST(request: NextRequest) {
 
     if (config) {
       try {
-        console.log('[AI] Calling', config.provider, '...');
+        console.log('[AI] Calling', config.provider, 'model:', config.model, '...');
         analysis = await callAI(config, systemPrompt, userPrompt);
         console.log('[AI] Responded, length:', analysis.length);
         if (!analysis.trim()) { analysis = generateFallback(dataSummary); usedFallback = true; }
       } catch (err: any) {
         console.error('[AI] Failed:', err.message);
-        analysis = `# تعذر الاتصال بـ ${config.provider}\n\nالخطأ: ${err.message}\n\n## التحليل المحلي\n\n` + generateFallback(dataSummary);
+        const hint = providerErrorHint(err.message || '');
+        analysis = `# ⚠️ تعذر الاتصال بـ ${config.provider}\n\n**الخطأ:** ${err.message}${hint ? `\n\n**🔧 الحل:** ${hint}` : ''}\n\n---\n\n## التحليل المحلي الاحتياطي\n\n` + generateFallback(dataSummary);
         usedFallback = true;
       }
     } else {
-      analysis = generateFallback(dataSummary);
+      analysis = `# ⚠️ لم يتم تكوين الذكاء الاصطناعي\n\nلا يوجد مفتاح API محفوظ. **🔧 الحل:** افتح قسم "إعدادات AI" من القائمة الجانبية، اختر مزوداً (Groq مجاني وسريع — احصل على مفتاحه من console.groq.com مجاناً)، الصق المفتاح واضغط "تفعيل"، ثم أعد التحليل الذكي.\n\n---\n\n## التحليل المحلي الاحتياطي\n\n` + generateFallback(dataSummary);
       usedFallback = true;
     }
 

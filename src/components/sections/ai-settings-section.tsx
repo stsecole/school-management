@@ -46,10 +46,10 @@ const PROVIDER_ICONS: Record<string, any> = {
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: 'zai', name: 'Z.AI (مدمج)', defaultModel: 'glm-4.6', requiresKey: false, supportsStreaming: true },
   { id: 'openai', name: 'OpenAI', defaultModel: 'gpt-4o-mini', requiresKey: true, supportsStreaming: true },
-  { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-1.5-flash', requiresKey: true, supportsStreaming: true },
+  { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-2.0-flash', requiresKey: true, supportsStreaming: true },
   { id: 'claude', name: 'Anthropic Claude', defaultModel: 'claude-3-5-sonnet-20241022', requiresKey: true, supportsStreaming: true },
   { id: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-chat', requiresKey: true, supportsStreaming: true },
-  { id: 'groq', name: 'Groq (مجاني وسريع)', defaultModel: 'llama-3.1-8b-instant', requiresKey: true, supportsStreaming: true },
+  { id: 'groq', name: 'Groq (مجاني وسريع)', defaultModel: 'llama-3.3-70b-versatile', requiresKey: true, supportsStreaming: true },
   { id: 'local', name: 'محلي (دون اتصال)', defaultModel: 'local-fallback', requiresKey: false, supportsStreaming: false },
 ];
 
@@ -92,7 +92,7 @@ export function AISettingsSection({ isDirector }: AISettingsSectionProps) {
       }
     } catch {
       // Even if API fails, show providers with default settings
-      setSettings({ enabled: true, provider: 'groq', apiKey: '', model: 'llama-3.1-8b-instant', maxTokens: 2048, temperature: 0.7 });
+      setSettings({ enabled: true, provider: 'groq', apiKey: '', model: 'llama-3.3-70b-versatile', maxTokens: 2048, temperature: 0.7 });
       setProviders(FALLBACK_PROVIDERS);
       toast.error('فشل تحميل الإعدادات - استخدام القيم الافتراضية');
     } finally {

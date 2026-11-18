@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
 import { ctxFromUser } from '@/lib/ai/context';
 import { buildSystemPrompt, detectIntent, extractActionBlock } from '@/lib/ai/router';
+import { fixModel, providerErrorHint } from '@/lib/ai/model-defaults';
 import type { ChatMessage } from '@/lib/ai/types';
 import type { ToolResult } from '@/lib/ai/tools/queries';
 
@@ -30,7 +31,8 @@ async function callAI(messages: ChatMessage[]): Promise<{ content: string; token
   ]);
   const apiKey = keyRow?.value || '';
   const provider = providerRow?.value || 'groq';
-  const model = modelRow?.value || 'llama-3.1-8b-instant';
+  // تصحيح تلقائي: إذا كان الموديل المحفوظ موقوفاً من المزود يُستبدل بالبديل الحديث
+  const model = fixModel(provider, modelRow?.value || '');
 
   if (!apiKey || apiKey.length < 10) {
     throw new Error('No API key configured');
@@ -49,7 +51,11 @@ async function callAI(messages: ChatMessage[]): Promise<{ content: string; token
         generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
       }),
     });
-    if (!res.ok) throw new Error(`Gemini ${res.status}`);
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      const hint = providerErrorHint(`${res.status} ${t}`);
+      throw new Error(`Gemini ${res.status}${t ? ': ' + t.substring(0, 200) : ''}${hint ? '\n🔧 ' + hint : ''}`);
+    }
     const data = await res.json();
     const content = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || '';
     return { content, tokensUsed: data.usageMetadata?.totalTokenCount || 0 };
@@ -71,7 +77,11 @@ async function callAI(messages: ChatMessage[]): Promise<{ content: string; token
       max_tokens: 2048,
     }),
   });
-  if (!res.ok) throw new Error(`${provider} ${res.status}`);
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    const hint = providerErrorHint(`${res.status} ${t}`);
+    throw new Error(`${provider} ${res.status}${t ? ': ' + t.substring(0, 200) : ''}${hint ? '\n🔧 ' + hint : ''}`);
+  }
   const data = await res.json();
   return {
     content: data.choices?.[0]?.message?.content || '',
