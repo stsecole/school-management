@@ -49,7 +49,7 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: 'gemini', name: 'Google Gemini', defaultModel: 'gemini-2.0-flash', requiresKey: true, supportsStreaming: true },
   { id: 'claude', name: 'Anthropic Claude', defaultModel: 'claude-3-5-sonnet-20241022', requiresKey: true, supportsStreaming: true },
   { id: 'deepseek', name: 'DeepSeek', defaultModel: 'deepseek-chat', requiresKey: true, supportsStreaming: true },
-  { id: 'groq', name: 'Groq (مجاني وسريع)', defaultModel: 'llama-3.3-70b-versatile', requiresKey: true, supportsStreaming: true },
+  { id: 'groq', name: 'Groq (مجاني وسريع)', defaultModel: 'openai/gpt-oss-120b', requiresKey: true, supportsStreaming: true },
   { id: 'local', name: 'محلي (دون اتصال)', defaultModel: 'local-fallback', requiresKey: false, supportsStreaming: false },
 ];
 
@@ -92,7 +92,7 @@ export function AISettingsSection({ isDirector }: AISettingsSectionProps) {
       }
     } catch {
       // Even if API fails, show providers with default settings
-      setSettings({ enabled: true, provider: 'groq', apiKey: '', model: 'llama-3.3-70b-versatile', maxTokens: 2048, temperature: 0.7 });
+      setSettings({ enabled: true, provider: 'groq', apiKey: '', model: 'openai/gpt-oss-120b', maxTokens: 2048, temperature: 0.7 });
       setProviders(FALLBACK_PROVIDERS);
       toast.error('فشل تحميل الإعدادات - استخدام القيم الافتراضية');
     } finally {

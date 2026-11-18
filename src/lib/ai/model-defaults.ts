@@ -1,11 +1,12 @@
 // ===== الموديلات الافتراضية الحالية للمزودين + الإصلاح التلقائي للموديلات الموقوفة =====
 // الخلفية: كان التطبيق يستخدم موديلات افتراضية توقفها المزودون:
 //  - gemini-1.5-flash: توقف نهائياً في 24 سبتمبر 2025 (البديل الرسمي: gemini-2.0-flash)
-//  - llama-3.1-8b-instant على Groq: أُعلن إيقافه في 17 يونيو 2026 (البديل: llama-3.3-70b-versatile)
+//  - llama-3.1-8b-instant على Groq: أُعلن إيقافه في 17 يونيو 2026 (البديل: openai/gpt-oss-20b)
+//  - llama-3.3-70b-versatile على Groq: أُوقف نهائياً في 16 أغسطس 2026 (البديل الرسمي: openai/gpt-oss-120b)
 // أي نسخة قديمة من هذه الموديلات محفوظة في قاعدة البيانات تُترجم تلقائياً عبر fixModel()
 
 export const CURRENT_DEFAULT_MODELS: Record<string, string> = {
-  groq: 'llama-3.3-70b-versatile',
+  groq: 'openai/gpt-oss-120b',
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
   deepseek: 'deepseek-chat',
@@ -16,7 +17,8 @@ const MODEL_FIX_MAP: Record<string, string> = {
   'gemini-1.5-flash': 'gemini-2.0-flash',
   'gemini-1.5-flash-8b': 'gemini-2.0-flash',
   'gemini-1.5-pro': 'gemini-2.0-flash',
-  'llama-3.1-8b-instant': 'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
+  'llama-3.3-70b-versatile': 'openai/gpt-oss-120b',
 };
 
 /**

@@ -7,7 +7,7 @@ export class GroqProvider extends OpenAIProvider {
     super({
       apiKey: opts.apiKey,
       baseUrl: opts.baseUrl || 'https://api.groq.com/openai/v1',
-      model: opts.model || 'llama-3.3-70b-versatile',
+      model: opts.model || 'openai/gpt-oss-120b',
     });
   }
 }

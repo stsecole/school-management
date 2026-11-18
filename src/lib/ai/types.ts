@@ -107,7 +107,7 @@ export const PROVIDER_DEFAULTS: Record<
   },
   groq: {
     name: 'Groq (مجاني وسريع)',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'openai/gpt-oss-120b',
     baseUrl: 'https://api.groq.com/openai/v1',
     requiresKey: true,
     supportsStreaming: true,

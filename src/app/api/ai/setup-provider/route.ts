@@ -1,55 +1,78 @@
-// ===== POST /api/ai/setup-provider — حفظ إعدادات أي مزود مباشرة =====
-// هذا المسار يتجاوز TypeScript types — يكتب الإعدادات كنصوص مباشرة في قاعدة البيانات
+// ===== POST /api/ai/setup-groq — يكتب إعدادات Groq مباشرة في قاعدة البيانات =====
+// هذا المسار يتجاوز TypeScript types — يكتب 'groq' كنص مباشر
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireDirector } from '@/lib/auth';
-import { CURRENT_DEFAULT_MODELS } from '@/lib/ai/model-defaults';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const PROVIDER_CONFIG: Record<string, { model: string; label: string }> = {
-  groq: { model: CURRENT_DEFAULT_MODELS.groq, label: 'Groq' },
-  gemini: { model: CURRENT_DEFAULT_MODELS.gemini, label: 'Google Gemini' },
-  openai: { model: CURRENT_DEFAULT_MODELS.openai, label: 'OpenAI' },
-  deepseek: { model: CURRENT_DEFAULT_MODELS.deepseek, label: 'DeepSeek' },
-};
 
 export async function POST(request: NextRequest) {
   try {
     await requireDirector();
     const body = await request.json();
-    const provider = body.provider;
     const apiKey = body.apiKey;
 
-    if (!provider || !PROVIDER_CONFIG[provider]) {
-      return NextResponse.json({ error: 'مزود غير صالح' }, { status: 400 });
-    }
     if (!apiKey || apiKey.length < 10) {
-      return NextResponse.json({ error: 'مفتاح API غير صالح' }, { status: 400 });
+      return NextResponse.json({ error: 'API key required' }, { status: 400 });
     }
 
-    const config = PROVIDER_CONFIG[provider];
+    // Write settings DIRECTLY to database as raw strings
+    // This bypasses TypeScript ProviderId type checking
+    await db.setting.upsert({
+      where: { key: 'ai_enabled' },
+      create: { key: 'ai_enabled', value: 'true' },
+      update: { value: 'true' },
+    });
 
-    // Write settings DIRECTLY to database
-    await db.setting.upsert({ where: { key: 'ai_enabled' }, create: { key: 'ai_enabled', value: 'true' }, update: { value: 'true' } });
-    await db.setting.upsert({ where: { key: 'ai_provider' }, create: { key: 'ai_provider', value: provider }, update: { value: provider } });
-    await db.setting.upsert({ where: { key: 'ai_api_key' }, create: { key: 'ai_api_key', value: apiKey }, update: { value: apiKey } });
-    await db.setting.upsert({ where: { key: 'ai_model' }, create: { key: 'ai_model', value: config.model }, update: { value: config.model } });
-    await db.setting.upsert({ where: { key: 'ai_max_tokens' }, create: { key: 'ai_max_tokens', value: '2048' }, update: { value: '2048' } });
-    await db.setting.upsert({ where: { key: 'ai_temperature' }, create: { key: 'ai_temperature', value: '0.7' }, update: { value: '0.7' } });
+    await db.setting.upsert({
+      where: { key: 'ai_provider' },
+      create: { key: 'ai_provider', value: 'groq' },
+      update: { value: 'groq' },
+    });
+
+    await db.setting.upsert({
+      where: { key: 'ai_api_key' },
+      create: { key: 'ai_api_key', value: apiKey },
+      update: { value: apiKey },
+    });
+
+    await db.setting.upsert({
+      where: { key: 'ai_model' },
+      create: { key: 'ai_model', value: 'openai/gpt-oss-120b' },
+      update: { value: 'openai/gpt-oss-120b' },
+    });
+
+    await db.setting.upsert({
+      where: { key: 'ai_max_tokens' },
+      create: { key: 'ai_max_tokens', value: '2048' },
+      update: { value: '2048' },
+    });
+
+    await db.setting.upsert({
+      where: { key: 'ai_temperature' },
+      create: { key: 'ai_temperature', value: '0.7' },
+      update: { value: '0.7' },
+    });
 
     return NextResponse.json({
       ok: true,
-      message: `تم تفعيل ${config.label} بنجاح`,
-      provider,
-      model: config.model,
+      message: 'Groq configured successfully',
+      settings: {
+        enabled: true,
+        provider: 'groq',
+        apiKey: apiKey.substring(0, 5) + '...',
+        model: 'openai/gpt-oss-120b',
+      },
     });
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED' || error.message === 'FORBIDDEN') {
       return NextResponse.json({ error: 'Director access required' }, { status: 403 });
     }
-    console.error('POST /api/ai/setup-provider error:', error);
-    return NextResponse.json({ error: 'Server error: ' + (error.message || '') }, { status: 500 });
+    console.error('POST /api/ai/setup-groq error:', error);
+    return NextResponse.json(
+      { error: 'Server error: ' + (error.message || 'Unknown') },
+      { status: 500 }
+    );
   }
 }

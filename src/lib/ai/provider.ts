@@ -119,7 +119,7 @@ export function createProvider(settings: AISettings): AIProvider {
       return new GroqProvider({
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl || 'https://api.groq.com/openai/v1',
-        model: settings.model || 'llama-3.3-70b-versatile',
+        model: settings.model || 'openai/gpt-oss-120b',
       });
     case 'local':
     default:
