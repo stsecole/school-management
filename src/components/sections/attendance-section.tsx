@@ -1068,8 +1068,13 @@ export function AttendanceSection() {
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
                   style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px' }}
                 >
-                  <div className="text-left" style={{ gridColumn: '1 / span 7' }}>
+                  <div className="text-left" style={{ gridColumn: '1 / span 6' }}>
                     الإجمالي ({attendances.length} سجل):
+                  </div>
+                  <div className="text-center whitespace-nowrap">
+                    <Badge variant="secondary" className="num font-bold">
+                      {formatDuration(totalDurationMinutes)}
+                    </Badge>
                   </div>
                   <div className="text-center num font-bold">{totalStudents}</div>
                   <div className="text-center num">{totalMale}</div>
