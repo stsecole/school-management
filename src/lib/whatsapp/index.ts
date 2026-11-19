@@ -73,11 +73,14 @@ export async function saveSettings(settings: Partial<WhatsAppSettings>): Promise
  * تنظيف رقم الهاتف (تحويل للصيغة الدولية)
  * "0551234567" → "213551234567"
  * "+213551234567" → "213551234567"
+ * "00213551234567" → "213551234567"
  */
 export function normalizePhone(phone: string, countryCode = '213'): string {
   let cleaned = phone.replace(/[^\d+]/g, '');
   // إزالة + في البداية
   if (cleaned.startsWith('+')) cleaned = cleaned.slice(1);
+  // إزالة بادئة 00 الدولية (مثل 00213)
+  if (cleaned.startsWith('00')) cleaned = cleaned.slice(2);
   // تحويل 0XX إلى countryCode+XX
   if (cleaned.startsWith('0')) {
     cleaned = countryCode + cleaned.slice(1);
@@ -98,6 +101,26 @@ export function generateWaMeLink(phone: string, message: string): string {
 }
 
 /**
+ * ترجمة أخطاء CallMeBot الشائعة إلى العربية مع الحل
+ */
+function callmebotErrorHint(text: string): string {
+  const t = (text || '').toLowerCase();
+  if (t.includes('apikey') && (t.includes('wrong') || t.includes('invalid') || t.includes('not valid') || t.includes('incorrect'))) {
+    return 'مفتاح CallMeBot غير صحيح لهذا الرقم. ⚠️ ملاحظة مهمة: مفتاح CallMeBot مرتبط برقم المستلم نفسه — كل رقم مستلم يجب أن يسجل بنفسه عبر بوت CallMeBot ليحصل على مفتاحه الخاص. لإرسال رسائل لعدة طلاب/أولياء تلقائياً برقم واحد، استخدم مزود Green API بدلاً منه.';
+  }
+  if (t.includes('not registered') || t.includes('register')) {
+    return 'رقم المستلم غير مسجل في CallMeBot. الحل: يجب أن يفتح المستلم بوت CallMeBot من هذا الرابط ويرسل كلمة "I allow callmebot to send me messages" ليحصل على مفتاحه الخاص — أو استخدم Green API.';
+  }
+  if (t.includes('malformed') || t.includes('invalid phone') || t.includes('phone number')) {
+    return 'رقم الهاتف بصيغة خاطئة. تأكد من حفظ الرقم بالصيغة الدولية أو المحلية الصحيحة (مثل 0551234567).';
+  }
+  if (t.includes('blocked') || t.includes('spam')) {
+    return 'تم حظر الإرسال مؤقتاً (مشتبه بإزعاج). الحل: قلّل عدد الرسائل المرسلة دفعة واحدة وانتظر قليلاً.';
+  }
+  return '';
+}
+
+/**
  * إرسال عبر CallMeBot
  */
 async function sendCallMeBot(phone: string, message: string, apiKey: string): Promise<{ ok: boolean; error?: string }> {
@@ -106,12 +129,19 @@ async function sendCallMeBot(phone: string, message: string, apiKey: string): Pr
   try {
     const res = await fetch(url, { method: 'GET' });
     const text = await res.text();
-    if (res.ok && !text.toLowerCase().includes('error')) {
+    const t = text.toLowerCase();
+    const looksLikeError = !res.ok
+      || t.includes('error')
+      || (t.includes('apikey') && (t.includes('wrong') || t.includes('invalid') || t.includes('not valid')))
+      || t.includes('not registered')
+      || t.includes('malformed');
+    if (res.ok && !looksLikeError) {
       return { ok: true };
     }
-    return { ok: false, error: text.slice(0, 200) };
+    const hint = callmebotErrorHint(text);
+    return { ok: false, error: `CallMeBot: ${text.slice(0, 150)}${hint ? '\n🔧 الحل: ' + hint : ''}` };
   } catch (e: any) {
-    return { ok: false, error: e.message };
+    return { ok: false, error: 'تعذر الاتصال بخدمة CallMeBot: ' + (e.message || '') };
   }
 }
 
@@ -168,28 +198,30 @@ export async function sendMessage(
     status = 'link_generated';
   } else if (settings.provider === 'callmebot') {
     if (!settings.callmebotApiKey) {
-      return { ok: false, error: 'CallMeBot API Key غير مضبوط في الإعدادات' };
+      status = 'failed';
+      errorMessage = 'CallMeBot API Key غير مضبوط في الإعدادات. الحل: افتح قسم الواتساب ← الإعدادات وأدخل المفتاح.';
+    } else {
+      const result = await sendCallMeBot(phone, message, settings.callmebotApiKey);
+      status = result.ok ? 'sent' : 'failed';
+      errorMessage = result.error || null;
     }
-    const result = await sendCallMeBot(phone, message, settings.callmebotApiKey);
-    status = result.ok ? 'sent' : 'failed';
-    errorMessage = result.error || null;
-    if (!result.ok) return { ok: false, error: result.error };
   } else if (settings.provider === 'greenapi') {
     if (!settings.greenapiIdInstance || !settings.greenapiApiTokenInstance) {
-      return { ok: false, error: 'Green API credentials غير مضبوطة في الإعدادات' };
+      status = 'failed';
+      errorMessage = 'Green API credentials غير مضبوطة في الإعدادات. الحل: افتح قسم الواتساب ← الإعدادات وأدخل ID Instance و API Token.';
+    } else {
+      const result = await sendGreenApi(
+        phone,
+        message,
+        settings.greenapiIdInstance,
+        settings.greenapiApiTokenInstance
+      );
+      status = result.ok ? 'sent' : 'failed';
+      errorMessage = result.error || null;
     }
-    const result = await sendGreenApi(
-      phone,
-      message,
-      settings.greenapiIdInstance,
-      settings.greenapiApiTokenInstance
-    );
-    status = result.ok ? 'sent' : 'failed';
-    errorMessage = result.error || null;
-    if (!result.ok) return { ok: false, error: result.error };
   }
 
-  // سجّل الرسالة
+  // سجّل الرسالة (ناجحة وفاشلة — لكي يظهر الفشل في السجل ويمكن تشخيصه من الواجهة)
   try {
     await db.whatsAppLog.create({
       data: {
@@ -207,6 +239,9 @@ export async function sendMessage(
     console.error('Failed to log WhatsApp message:', e);
   }
 
+  if (status === 'failed') {
+    return { ok: false, error: errorMessage || 'فشل إرسال الرسالة' };
+  }
   return { ok: true, link };
 }
 

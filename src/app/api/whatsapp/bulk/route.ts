@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/auth';
-import { sendMessage, fillTemplate } from '@/lib/whatsapp';
+import { sendMessage, fillTemplate, getSettings } from '@/lib/whatsapp';
 
 /**
  * POST /api/whatsapp/bulk
@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const settings = await getSettings();
+
     const results: any[] = [];
     let sentCount = 0;
     let failedCount = 0;
@@ -49,9 +51,16 @@ export async function POST(request: NextRequest) {
           department: r.department || '',
           month: r.month || '',
           message: r.message || '',
-          senderName: 'مدرسة السلامة',
+          senderName: settings.senderName,
           ...r.variables,
         });
+      }
+
+      // تجاهل الرسائل الفارغة بدل إرسالها
+      if (!msgText.trim()) {
+        failedCount++;
+        results.push({ name: r.name, phone: r.phone, ok: false, error: 'نص الرسالة فارغ (لا رسالة مباشرة ولا قالب)' });
+        continue;
       }
 
       const result = await sendMessage(r.phone, msgText, {

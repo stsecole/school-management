@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
-import { getSettings, saveSettings, DEFAULT_SETTINGS } from '@/lib/whatsapp';
+import { requireAuth, requireDirector } from '@/lib/auth';
+import { getSettings, saveSettings } from '@/lib/whatsapp';
 
 /**
  * GET /api/whatsapp/settings
@@ -20,11 +20,11 @@ export async function GET() {
 }
 
 /**
- * PUT /api/whatsapp/settings
+ * PUT /api/whatsapp/settings — تعديل الإعدادات للمدير فقط
  */
 export async function PUT(request: NextRequest) {
   try {
-    await requireAuth();
+    await requireDirector();
     const body = await request.json();
     await saveSettings(body);
     const settings = await getSettings();
@@ -33,6 +33,10 @@ export async function PUT(request: NextRequest) {
     if (error.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
     }
+    if (error.message === 'FORBIDDEN') {
+      return NextResponse.json({ error: 'تعديل إعدادات الواتساب متاح للمدير فقط' }, { status: 403 });
+    }
+    console.error('[WhatsApp] PUT settings error:', error);
     return NextResponse.json({ error: 'خطأ في الخادم' }, { status: 500 });
   }
 }
