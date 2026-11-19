@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         name: r.name,
         phone: r.phone,
         ok: result.ok,
-        link: result.link,
+        messageId: result.messageId,
         error: result.error,
       });
 

@@ -1,31 +1,37 @@
 /**
- * طبقة الواتساب — تدعم 3 طرق:
- * 1. wa.me links (مجاني، يدوي)
- * 2. CallMeBot API (مجاني، تلقائي)
- * 3. Green API (مجاني 200 رسالة/يوم، تلقائي)
+ * طبقة الواتساب — WhatsApp Cloud API الرسمية (Meta)
+ * كل الطرق القديمة (wa.me / CallMeBot / Green API) أُزيلت نهائياً.
+ *
+ * المطلوب من Meta:
+ *  - حساب أعمال + تطبيق على developers.facebook.com مع منتج WhatsApp
+ *  - Phone Number ID (معرّف رقم واتساب للأعمال)
+ *  - Access Token دائم (من System User في Meta Business Settings بصلاحية whatsapp_business_messaging)
  */
 
 import { db } from '@/lib/db';
 
-export type WhatsAppProvider = 'wame' | 'callmebot' | 'greenapi';
+// إصدار Graph API — ثابت ومستقر
+const GRAPH_VERSION = 'v22.0';
+const GRAPH_URL = `https://graph.facebook.com/${GRAPH_VERSION}`;
+
+export type WhatsAppProvider = 'cloud-api';
 
 export interface WhatsAppSettings {
   provider: WhatsAppProvider;
-  // CallMeBot
-  callmebotApiKey: string;
-  // Green API
-  greenapiIdInstance: string;
-  greenapiApiTokenInstance: string;
+  // Meta Cloud API
+  accessToken: string;      // توكن دائم من System User
+  phoneNumberId: string;    // Phone Number ID
+  wabaId: string;           // WhatsApp Business Account ID (اختياري)
   // عام
   senderName: string;
   defaultCountryCode: string; // "213" للجزائر
 }
 
 export const DEFAULT_SETTINGS: WhatsAppSettings = {
-  provider: 'wame',
-  callmebotApiKey: '',
-  greenapiIdInstance: '',
-  greenapiApiTokenInstance: '',
+  provider: 'cloud-api',
+  accessToken: '',
+  phoneNumberId: '',
+  wabaId: '',
   senderName: 'مدرسة السلامة',
   defaultCountryCode: '213',
 };
@@ -39,10 +45,10 @@ export async function getSettings(): Promise<WhatsAppSettings> {
   for (const r of rows) map[r.key] = r.value;
 
   return {
-    provider: (map['provider'] as WhatsAppProvider) || 'wame',
-    callmebotApiKey: map['callmebot_apikey'] || '',
-    greenapiIdInstance: map['greenapi_id_instance'] || '',
-    greenapiApiTokenInstance: map['greenapi_api_token'] || '',
+    provider: 'cloud-api',
+    accessToken: map['access_token'] || '',
+    phoneNumberId: map['phone_number_id'] || '',
+    wabaId: map['waba_id'] || '',
     senderName: map['sender_name'] || 'مدرسة السلامة',
     defaultCountryCode: map['default_country_code'] || '213',
   };
@@ -53,10 +59,9 @@ export async function getSettings(): Promise<WhatsAppSettings> {
  */
 export async function saveSettings(settings: Partial<WhatsAppSettings>): Promise<void> {
   const entries: [string, string][] = [];
-  if (settings.provider !== undefined) entries.push(['provider', settings.provider]);
-  if (settings.callmebotApiKey !== undefined) entries.push(['callmebot_apikey', settings.callmebotApiKey]);
-  if (settings.greenapiIdInstance !== undefined) entries.push(['greenapi_id_instance', settings.greenapiIdInstance]);
-  if (settings.greenapiApiTokenInstance !== undefined) entries.push(['greenapi_api_token', settings.greenapiApiTokenInstance]);
+  if (settings.accessToken !== undefined) entries.push(['access_token', settings.accessToken]);
+  if (settings.phoneNumberId !== undefined) entries.push(['phone_number_id', settings.phoneNumberId]);
+  if (settings.wabaId !== undefined) entries.push(['waba_id', settings.wabaId]);
   if (settings.senderName !== undefined) entries.push(['sender_name', settings.senderName]);
   if (settings.defaultCountryCode !== undefined) entries.push(['default_country_code', settings.defaultCountryCode]);
 
@@ -70,7 +75,7 @@ export async function saveSettings(settings: Partial<WhatsAppSettings>): Promise
 }
 
 /**
- * تنظيف رقم الهاتف (تحويل للصيغة الدولية)
+ * تنظيف رقم الهاتف (تحويل للصيغة الدولية بدون +)
  * "0551234567" → "213551234567"
  * "+213551234567" → "213551234567"
  * "00213551234567" → "213551234567"
@@ -93,132 +98,146 @@ export function normalizePhone(phone: string, countryCode = '213'): string {
 }
 
 /**
- * توليد رابط wa.me
+ * ترجمة أخطاء Cloud API الشائعة إلى العربية مع الحل
  */
-export function generateWaMeLink(phone: string, message: string): string {
-  const normalized = normalizePhone(phone);
-  return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
-}
+function cloudApiErrorHint(err: any): string {
+  const code = Number(err?.code) || 0;
+  const subcode = Number(err?.error_subcode) || 0;
+  const type = String(err?.type || '').toLowerCase();
+  const message = String(err?.message || '').toLowerCase();
 
-/**
- * ترجمة أخطاء CallMeBot الشائعة إلى العربية مع الحل
- */
-function callmebotErrorHint(text: string): string {
-  const t = (text || '').toLowerCase();
-  if (t.includes('apikey') && (t.includes('wrong') || t.includes('invalid') || t.includes('not valid') || t.includes('incorrect'))) {
-    return 'مفتاح CallMeBot غير صحيح لهذا الرقم. ⚠️ ملاحظة مهمة: مفتاح CallMeBot مرتبط برقم المستلم نفسه — كل رقم مستلم يجب أن يسجل بنفسه عبر بوت CallMeBot ليحصل على مفتاحه الخاص. لإرسال رسائل لعدة طلاب/أولياء تلقائياً برقم واحد، استخدم مزود Green API بدلاً منه.';
+  if (code === 190) {
+    return 'التوكن (Access Token) غير صالح أو منتهي. الحل: من Meta Business Settings → Users → System Users، أنشئ توكن دائماً (نوع: permanent) بصلاحيات whatsapp_business_messaging و whatsapp_business_management، ثم حدّثه في الإعدادات.';
   }
-  if (t.includes('not registered') || t.includes('register')) {
-    return 'رقم المستلم غير مسجل في CallMeBot. الحل: يجب أن يفتح المستلم بوت CallMeBot من هذا الرابط ويرسل كلمة "I allow callmebot to send me messages" ليحصل على مفتاحه الخاص — أو استخدم Green API.';
+  if (code === 131047 || subcode === 2494055 || message.includes('re-engagement')) {
+    return 'لا يمكن إرسال رسالة نصية حرة خارج نافذة 24 ساعة. قاعدة Meta: المستلم يجب أن يرسل لك رسالة أولاً (أي رسالة) لفتح نافذة 24 ساعة، أو استخدم قالباً معتمداً من Meta (Template). الحل السريع: اطلب من أولياء الأمور حفظ رقم المدرسة وإرسال أي رسالة مثل "مرحبا" مرة واحدة.';
   }
-  if (t.includes('malformed') || t.includes('invalid phone') || t.includes('phone number')) {
-    return 'رقم الهاتف بصيغة خاطئة. تأكد من حفظ الرقم بالصيغة الدولية أو المحلية الصحيحة (مثل 0551234567).';
+  if (code === 131030 || message.includes('not a whatsapp') || message.includes('recipient phone number not in allowed list')) {
+    return 'الرقم غير مسجل على واتساب أو ليس ضمن أرقام الاختبار المسموحة. إذا كنت في وضع التطوير (Development)، أضف أرقام المستلمين في: App Dashboard → WhatsApp → To (Recipient phone numbers). للإرسال لأي رقم يجب نشر التطبيق (App Review).';
   }
-  if (t.includes('blocked') || t.includes('spam')) {
-    return 'تم حظر الإرسال مؤقتاً (مشتبه بإزعاج). الحل: قلّل عدد الرسائل المرسلة دفعة واحدة وانتظر قليلاً.';
+  if (code === 130429 || code === 80007 || message.includes('rate limit') || message.includes('throttl')) {
+    return 'تم تجاوز حد الإرسال مؤقتاً (Rate Limit). الحل: قلّل عدد الرسائل في الدفعة الواحدة (الحد يعتمد على مستوى جودة الرقم)، أو انتظر دقيقة وأعد المحاولة.';
+  }
+  if (code === 100 || message.includes('phone_number_id') || message.includes('unsupported')) {
+    return 'Phone Number ID غير صحيح أو طلب غير مدعوم. الحل: من App Dashboard → WhatsApp → API Setup، انسخ Phone number ID بالضبط والصقه في الإعدادات.';
+  }
+  if (code === 10 || type.includes('permission') || message.includes('permission')) {
+    return 'التوكن لا يملك الصلاحيات الكافية. الحل: تأكد أن التوكن من System User (وليس توكن تطبيق مؤقت) ويملك صلاحية whatsapp_business_messaging.';
+  }
+  if (code === 131026 || message.includes('undeliverable')) {
+    return 'الرسالة غير قابلة للتوصيل. تأكد من صحة رقم المستلم وأنه يستخدم واتساب فعلاً.';
+  }
+  if (message.includes('recipient') && (message.includes('invalid') || message.includes('malformed'))) {
+    return 'رقم المستلم بصيغة خاطئة. يجب أن يكون بالصيغة الدولية الكاملة بدون + وبدون 0 في البداية (مثال: 213551234567).';
   }
   return '';
 }
 
 /**
- * إرسال عبر CallMeBot
+ * إرسال رسالة نصية عبر WhatsApp Cloud API
  */
-async function sendCallMeBot(phone: string, message: string, apiKey: string): Promise<{ ok: boolean; error?: string }> {
-  const normalized = normalizePhone(phone);
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${normalized}&text=${encodeURIComponent(message)}&apikey=${apiKey}`;
+async function sendCloudApi(
+  phone: string,
+  message: string,
+  settings: WhatsAppSettings
+): Promise<{ ok: boolean; messageId?: string; error?: string }> {
+  const normalized = normalizePhone(phone, settings.defaultCountryCode);
+  const url = `${GRAPH_URL}/${settings.phoneNumberId}/messages`;
   try {
-    const res = await fetch(url, { method: 'GET' });
-    const text = await res.text();
-    const t = text.toLowerCase();
-    const looksLikeError = !res.ok
-      || t.includes('error')
-      || (t.includes('apikey') && (t.includes('wrong') || t.includes('invalid') || t.includes('not valid')))
-      || t.includes('not registered')
-      || t.includes('malformed');
-    if (res.ok && !looksLikeError) {
-      return { ok: true };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.accessToken}`,
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: normalized,
+        type: 'text',
+        text: { preview_url: false, body: message },
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const err = data?.error || {};
+      const hint = cloudApiErrorHint(err);
+      const raw = `Meta Cloud API ${res.status}: ${err.message || JSON.stringify(data).slice(0, 150)} (code: ${err.code || '—'})`;
+      return { ok: false, error: `${raw}${hint ? '\n🔧 الحل: ' + hint : ''}` };
     }
-    const hint = callmebotErrorHint(text);
-    return { ok: false, error: `CallMeBot: ${text.slice(0, 150)}${hint ? '\n🔧 الحل: ' + hint : ''}` };
+
+    const messageId = data?.messages?.[0]?.id;
+    if (!messageId) {
+      return { ok: false, error: 'استجابة غير متوقعة من Meta (بدون معرّف رسالة): ' + JSON.stringify(data).slice(0, 150) };
+    }
+    return { ok: true, messageId };
   } catch (e: any) {
-    return { ok: false, error: 'تعذر الاتصال بخدمة CallMeBot: ' + (e.message || '') };
+    return { ok: false, error: 'تعذر الاتصال بخوادم Meta: ' + (e.message || '') };
   }
 }
 
 /**
- * إرسال عبر Green API
+ * اختبار إعدادات Cloud API — يجلب بيانات رقم واتساب للأعمال
+ * يُستخدم من زر "اختبار الاتصال" في الإعدادات
  */
-async function sendGreenApi(
-  phone: string,
-  message: string,
-  idInstance: string,
-  apiTokenInstance: string
-): Promise<{ ok: boolean; error?: string }> {
-  const normalized = normalizePhone(phone);
-  const url = `https://api.green-api.com/waInstance${idInstance}/sendMessage/${apiTokenInstance}`;
+export async function testCloudApiSettings(
+  settings?: WhatsAppSettings
+): Promise<{ ok: boolean; message: string; phone?: string }> {
+  const s = settings || (await getSettings());
+  if (!s.accessToken || !s.phoneNumberId) {
+    return {
+      ok: false,
+      message: 'الإعدادات ناقصة: أدخل Access Token و Phone Number ID ثم احفظ قبل الاختبار.',
+    };
+  }
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chatId: `${normalized}@c.us`,
-        message: message,
-      }),
-    });
+    const res = await fetch(
+      `${GRAPH_URL}/${s.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating&access_token=${encodeURIComponent(s.accessToken)}`
+    );
     const data = await res.json();
-    if (res.ok && data.idMessage) {
-      return { ok: true };
+    if (!res.ok) {
+      const err = data?.error || {};
+      const hint = cloudApiErrorHint(err);
+      return {
+        ok: false,
+        message: `فشل الاتصال بـ Meta (${res.status}): ${err.message || 'خطأ غير معروف'}${hint ? '\n🔧 الحل: ' + hint : ''}`,
+      };
     }
-    return { ok: false, error: data.description || JSON.stringify(data) };
+    return {
+      ok: true,
+      message: `تم الاتصال بنجاح — الرقم: ${data.display_phone_number || '—'} (${data.verified_name || 'بدون اسم'}${data.quality_rating ? ' • جودة: ' + data.quality_rating : ''})`,
+      phone: data.display_phone_number,
+    };
   } catch (e: any) {
-    return { ok: false, error: e.message };
+    return { ok: false, message: 'تعذر الاتصال بخوادم Meta: ' + (e.message || '') };
   }
 }
 
 /**
  * إرسال رسالة واتساب (الإعداد العام)
- * يُرجع: { ok, link?, error? }
- * - إن كان wa.me: ok=true, link=الرابط
- * - إن كان callmebot/greenapi: ok=true/false, لا link
+ * يُرجع: { ok, messageId?, error? }
  */
 export async function sendMessage(
   phone: string,
   message: string,
   options?: { templateName?: string; sentBy?: string; recipientName?: string }
-): Promise<{ ok: boolean; link?: string; error?: string }> {
+): Promise<{ ok: boolean; messageId?: string; error?: string }> {
   const settings = await getSettings();
   const recipientName = options?.recipientName || '';
 
   let status: string = 'failed';
   let errorMessage: string | null = null;
-  let link: string | undefined;
+  let messageId: string | undefined;
 
-  if (settings.provider === 'wame') {
-    link = generateWaMeLink(phone, message);
-    status = 'link_generated';
-  } else if (settings.provider === 'callmebot') {
-    if (!settings.callmebotApiKey) {
-      status = 'failed';
-      errorMessage = 'CallMeBot API Key غير مضبوط في الإعدادات. الحل: افتح قسم الواتساب ← الإعدادات وأدخل المفتاح.';
-    } else {
-      const result = await sendCallMeBot(phone, message, settings.callmebotApiKey);
-      status = result.ok ? 'sent' : 'failed';
-      errorMessage = result.error || null;
-    }
-  } else if (settings.provider === 'greenapi') {
-    if (!settings.greenapiIdInstance || !settings.greenapiApiTokenInstance) {
-      status = 'failed';
-      errorMessage = 'Green API credentials غير مضبوطة في الإعدادات. الحل: افتح قسم الواتساب ← الإعدادات وأدخل ID Instance و API Token.';
-    } else {
-      const result = await sendGreenApi(
-        phone,
-        message,
-        settings.greenapiIdInstance,
-        settings.greenapiApiTokenInstance
-      );
-      status = result.ok ? 'sent' : 'failed';
-      errorMessage = result.error || null;
-    }
+  if (!settings.accessToken || !settings.phoneNumberId) {
+    errorMessage = 'WhatsApp Cloud API غير مضبوط. الحل: افتح قسم الواتساب ← الإعدادات، أدخل Access Token و Phone Number ID من Meta، ثم احفظ.';
+  } else {
+    const result = await sendCloudApi(phone, message, settings);
+    status = result.ok ? 'sent' : 'failed';
+    errorMessage = result.error || null;
+    messageId = result.messageId;
   }
 
   // سجّل الرسالة (ناجحة وفاشلة — لكي يظهر الفشل في السجل ويمكن تشخيصه من الواجهة)
@@ -230,7 +249,7 @@ export async function sendMessage(
         message,
         templateName: options?.templateName || null,
         status,
-        provider: settings.provider,
+        provider: 'cloud-api',
         errorMessage,
         sentBy: options?.sentBy || null,
       },
@@ -242,7 +261,7 @@ export async function sendMessage(
   if (status === 'failed') {
     return { ok: false, error: errorMessage || 'فشل إرسال الرسالة' };
   }
-  return { ok: true, link };
+  return { ok: true, messageId };
 }
 
 /**

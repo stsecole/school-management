@@ -9,20 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import {
-  MessageCircle, Send, Settings, FileText, History, Users, AlertCircle,
+  MessageCircle, Send, Settings, FileText, History, Users,
   CheckCircle2, XCircle, ExternalLink, Plus, Edit, Trash2, Loader2,
-  Smartphone, Zap,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface WhatsAppSettings {
-  provider: 'wame' | 'callmebot' | 'greenapi';
-  callmebotApiKey: string;
-  greenapiIdInstance: string;
-  greenapiApiTokenInstance: string;
+  provider: 'cloud-api';
+  accessToken: string;
+  phoneNumberId: string;
+  wabaId: string;
   senderName: string;
   defaultCountryCode: string;
 }
@@ -70,7 +68,7 @@ export function WhatsAppSection({ isDirector }: { isDirector: boolean }) {
         </div>
         <div>
           <h2 className="text-2xl font-bold">الرسائل والتنبيهات</h2>
-          <p className="text-sm text-muted-foreground">إرسال تنبيهات الواتساب للطلاب وأولياء الأمور</p>
+          <p className="text-sm text-muted-foreground">إرسال تنبيهات الواتساب للطلاب وأولياء الأمور — عبر WhatsApp Cloud API الرسمية</p>
         </div>
       </div>
 
@@ -87,7 +85,7 @@ export function WhatsAppSection({ isDirector }: { isDirector: boolean }) {
         <TabsContent value="late-payers"><LatePayersTab /></TabsContent>
         <TabsContent value="templates"><TemplatesTab /></TabsContent>
         <TabsContent value="logs"><LogsTab /></TabsContent>
-        <TabsContent value="settings"><SettingsTab /></TabsContent>
+        <TabsContent value="settings">{isDirector ? <SettingsTab /> : <div className="text-center py-8 text-muted-foreground">الإعدادات متاحة للمدير فقط</div>}</TabsContent>
       </Tabs>
     </div>
   );
@@ -101,7 +99,6 @@ function SendTab() {
   const [templateName, setTemplateName] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [sending, setSending] = useState(false);
-  const [resultLink, setResultLink] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -122,7 +119,6 @@ function SendTab() {
       return;
     }
     setSending(true);
-    setResultLink(null);
     try {
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -131,12 +127,8 @@ function SendTab() {
       });
       const data = await res.json();
       if (data.ok) {
-        if (data.link) {
-          setResultLink(data.link);
-          toast({ title: 'تم', description: 'تم توليد رابط الواتساب. اضغط للإرسال.' });
-        } else {
-          toast({ title: 'تم', description: 'تم إرسال الرسالة بنجاح' });
-        }
+        toast({ title: 'تم', description: 'تم إرسال الرسالة بنجاح عبر WhatsApp Cloud API' });
+        setMessage('');
       } else {
         toast({ title: 'خطأ', description: data.error || 'فشل الإرسال', variant: 'destructive' });
       }
@@ -184,21 +176,6 @@ function SendTab() {
             المتغيرات: {'{name}'} {'{amount}'} {'{date}'} {'{department}'} {'{senderName}'}
           </p>
         </div>
-
-        {resultLink && (
-          <div className="p-4 rounded-lg bg-green-50 border border-green-200 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-green-800">تم توليد رابط الواتساب</p>
-              <p className="text-xs text-green-600">اضغط الزر لفتح واتساب وإرسال الرسالة</p>
-            </div>
-            <Button asChild size="sm">
-              <a href={resultLink} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-4 h-4 ml-1" /> فتح واتساب
-              </a>
-            </Button>
-          </div>
-        )}
 
         <Button onClick={handleSend} disabled={sending} className="w-full">
           {sending ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <Send className="w-4 h-4 ml-2" />}
@@ -281,14 +258,9 @@ function LatePayersTab() {
       if (data.ok) {
         toast({
           title: 'تم',
-          description: `تم إرسال ${data.sent} رسالة بنجاح${data.failed > 0 ? `، فشل ${data.failed}` : ''}`,
+          description: `تم إرسال ${data.sent} رسالة بنجاح${data.failed > 0 ? `، فشل ${data.failed} — راجع السجل لمعرفة الأسباب` : ''}`,
         });
-        // إن كانت روابط wa.me، افتحها
-        if (data.results?.some((r: any) => r.link)) {
-          data.results.filter((r: any) => r.link).forEach((r: any) => {
-            window.open(r.link, '_blank');
-          });
-        }
+        setSelected(new Set());
       } else {
         toast({ title: 'خطأ', description: data.error, variant: 'destructive' });
       }
@@ -606,25 +578,27 @@ function LogsTab() {
   );
 }
 
-// ===== تبويب الإعدادات =====
+// ===== تبويب الإعدادات — WhatsApp Cloud API =====
 function SettingsTab() {
   const [settings, setSettings] = useState<WhatsAppSettings>({
-    provider: 'wame',
-    callmebotApiKey: '',
-    greenapiIdInstance: '',
-    greenapiApiTokenInstance: '',
+    provider: 'cloud-api',
+    accessToken: '',
+    phoneNumberId: '',
+    wabaId: '',
     senderName: 'مدرسة السلامة',
     defaultCountryCode: '213',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const { toast } = useToast();
 
   const load = async () => {
     try {
       const res = await fetch('/api/whatsapp/settings');
       const data = await res.json();
-      if (data.settings) setSettings(data.settings);
+      if (data.settings) setSettings({ ...settings, ...data.settings, provider: 'cloud-api' });
     } finally {
       setLoading(false);
     }
@@ -633,6 +607,10 @@ function SettingsTab() {
   useEffect(() => { load(); }, []);
 
   const handleSave = async () => {
+    if (!settings.accessToken || !settings.phoneNumberId) {
+      toast({ title: 'تنبيه', description: 'Access Token و Phone Number ID مطلوبان', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/whatsapp/settings', {
@@ -641,12 +619,28 @@ function SettingsTab() {
         body: JSON.stringify(settings),
       });
       if (res.ok) {
-        toast({ title: 'تم', description: 'تم حفظ الإعدادات' });
+        toast({ title: 'تم', description: 'تم حفظ إعدادات Cloud API' });
+        setTestResult(null);
       } else {
-        toast({ title: 'خطأ', description: 'فشل الحفظ', variant: 'destructive' });
+        const d = await res.json().catch(() => ({}));
+        toast({ title: 'خطأ', description: d.error || 'فشل الحفظ', variant: 'destructive' });
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/whatsapp/test', { method: 'POST' });
+      const data = await res.json();
+      setTestResult({ ok: !!data.ok, message: data.message || '—' });
+    } catch (e: any) {
+      setTestResult({ ok: false, message: e.message || 'فشل الاختبار' });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -656,107 +650,73 @@ function SettingsTab() {
 
   return (
     <div className="space-y-4">
-      {/* اختيار المزود */}
+      {/* WhatsApp Cloud API */}
       <Card>
-        <CardHeader><CardTitle>طريقة الإرسال</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            { id: 'wame', name: 'روابط wa.me', desc: 'مجاني — يفتح واتساب بالرسالة جاهزة (يدوي)', icon: <Smartphone className="w-5 h-5" /> },
-            { id: 'callmebot', name: 'CallMeBot API', desc: 'مجاني — إرسال تلقائي (يتطلب تسجيل الرقم)', icon: <Zap className="w-5 h-5" /> },
-            { id: 'greenapi', name: 'Green API', desc: 'مجاني 200/يوم — إرسال تلقائي موثوق', icon: <Zap className="w-5 h-5" /> },
-          ].map(p => (
-            <button
-              key={p.id}
-              onClick={() => setSettings({ ...settings, provider: p.id as any })}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-right transition-all ${
-                settings.provider === p.id ? 'border-green-500 bg-green-50' : 'border-border hover:border-green-300'
-              }`}
-            >
-              <div className={`p-2 rounded-lg ${settings.provider === p.id ? 'bg-green-100 text-green-700' : 'bg-muted'}`}>
-                {p.icon}
-              </div>
-              <div className="flex-1">
-                <p className="font-medium">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.desc}</p>
-              </div>
-              {settings.provider === p.id && <CheckCircle2 className="w-5 h-5 text-green-600" />}
-            </button>
-          ))}
+        <CardHeader><CardTitle>WhatsApp Cloud API (Meta — الرسمية)</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
+            <p className="font-medium text-blue-800 mb-1">📋 خطوات الحصول على البيانات من Meta:</p>
+            <ol className="list-decimal list-inside text-blue-700 space-y-1 text-xs">
+              <li>اذهب إلى <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline">developers.facebook.com</a> وأنشئ تطبيق نوع <b>Business</b></li>
+              <li>أضف منتج <b>WhatsApp</b> إلى التطبيق</li>
+              <li>من صفحة <b>API Setup</b> انسخ <b>Phone number ID</b> (الصقه أدناه)</li>
+              <li>التوكن التجريبي المؤقت يعمل للاختبار — للإنتاج: من <b>Meta Business Settings → Users → System Users</b> أنشئ توكن دائم (permanent) بصلاحيتي <code dir="ltr">whatsapp_business_messaging</code> و <code dir="ltr">whatsapp_business_management</code></li>
+              <li>في وضع التطوير (Development) أضف أرقام المستلمين في <b>To — Recipient phone numbers</b>؛ وللإرسال لأي رقم انشر التطبيق (App Review)</li>
+            </ol>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Access Token (توكن Meta)</Label>
+            <Input
+              value={settings.accessToken}
+              onChange={e => setSettings({ ...settings, accessToken: e.target.value })}
+              placeholder="EAAG..."
+              dir="ltr"
+              type="password"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Phone Number ID (معرّف رقم واتساب)</Label>
+            <Input
+              value={settings.phoneNumberId}
+              onChange={e => setSettings({ ...settings, phoneNumberId: e.target.value })}
+              placeholder="123456789012345"
+              dir="ltr"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>WABA ID (اختياري — معرّف حساب الأعمال)</Label>
+            <Input
+              value={settings.wabaId}
+              onChange={e => setSettings({ ...settings, wabaId: e.target.value })}
+              placeholder="102345678901234"
+              dir="ltr"
+            />
+          </div>
+
+          {testResult && (
+            <div className={`p-3 rounded-lg text-sm whitespace-pre-line ${testResult.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+              {testResult.ok ? '✅ ' : '❌ '}{testResult.message}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button onClick={handleTest} disabled={testing || !settings.accessToken || !settings.phoneNumberId} variant="outline" className="flex-1">
+              {testing ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 ml-2" />}
+              اختبار الاتصال بـ Meta
+            </Button>
+          </div>
         </CardContent>
       </Card>
-
-      {/* إعدادات CallMeBot */}
-      {settings.provider === 'callmebot' && (
-        <Card>
-          <CardHeader><CardTitle>إعدادات CallMeBot</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
-              <p className="font-medium text-blue-800 mb-1">📋 خطوات الإعداد:</p>
-              <ol className="list-decimal list-inside text-blue-700 space-y-1 text-xs">
-                <li>أضف الرقم <code dir="ltr">+34 644 79 31 45</code> لجهات الاتصال</li>
-                <li>أرسل له رسالة: <code dir="ltr">I allow callmebot to send me messages</code></li>
-                <li>ستصلك رسالة بالـ API Key</li>
-                <li>الصق الـ API Key أدناه</li>
-              </ol>
-              <a href="https://www.callmebot.com/blog/free-api-whatsapp-messages/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-xs mt-2 inline-block">
-                دليل مفصّل ←
-              </a>
-            </div>
-            <div className="space-y-2">
-              <Label>CallMeBot API Key</Label>
-              <Input
-                value={settings.callmebotApiKey}
-                onChange={e => setSettings({ ...settings, callmebotApiKey: e.target.value })}
-                placeholder="1234567"
-                dir="ltr"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* إعدادات Green API */}
-      {settings.provider === 'greenapi' && (
-        <Card>
-          <CardHeader><CardTitle>إعدادات Green API</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
-              <p className="font-medium text-blue-800 mb-1">📋 خطوات الإعداد:</p>
-              <ol className="list-decimal list-inside text-blue-700 space-y-1 text-xs">
-                <li>اذهب إلى <a href="https://green-api.com" target="_blank" rel="noopener noreferrer" className="underline">green-api.com</a></li>
-                <li>أنشئ حساباً مجاناً</li>
-                <li>امسح QR code بربط واتساب</li>
-                <li>انسخ IdInstance و ApiTokenInstance</li>
-              </ol>
-            </div>
-            <div className="space-y-2">
-              <Label>Id Instance</Label>
-              <Input
-                value={settings.greenapiIdInstance}
-                onChange={e => setSettings({ ...settings, greenapiIdInstance: e.target.value })}
-                placeholder="7102345678"
-                dir="ltr"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Api Token Instance</Label>
-              <Input
-                value={settings.greenapiApiTokenInstance}
-                onChange={e => setSettings({ ...settings, greenapiApiTokenInstance: e.target.value })}
-                placeholder="a6b3c4d5e6f7..."
-                dir="ltr"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* إعدادات عامة */}
       <Card>
         <CardHeader><CardTitle>إعدادات عامة</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>اسم المُرسِل</Label>
+            <Label>اسم المُرسِل (يُستخدم في القوالب كـ {'{senderName}'})</Label>
             <Input
               value={settings.senderName}
               onChange={e => setSettings({ ...settings, senderName: e.target.value })}
@@ -771,7 +731,7 @@ function SettingsTab() {
               placeholder="213"
               dir="ltr"
             />
-            <p className="text-xs text-muted-foreground">213 للجزائر، 1 لأمريكا، 33 لفرنسا...</p>
+            <p className="text-xs text-muted-foreground">213 للجزائر، 1 لأمريكا، 33 لفرنسا... يُحوِّل الأرقام المحلية (05xxxxxxxx) تلقائياً للصيغة الدولية</p>
           </div>
         </CardContent>
       </Card>
