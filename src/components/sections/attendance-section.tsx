@@ -939,9 +939,15 @@ export function AttendanceSection() {
   };
 
   const handleDelete = async (a: Attendance) => {
-    if (!confirm('حذف سجل الحضور؟')) return;
+    if (!confirm(`حذف سجل الحضور (${a.courseName})؟ لا يمكن التراجع عن هذه العملية.`)) return;
     const res = await fetch(`/api/attendance/${a.id}`, { method: 'DELETE' });
-    if (res.ok) { toast({ title: 'تم', description: 'تم الحذف' }); load(); }
+    if (res.ok) {
+      toast({ title: 'تم', description: 'تم حذف سجل الحضور' });
+      load();
+    } else {
+      const data = await res.json().catch(() => null);
+      toast({ title: 'خطأ', description: data?.error || 'فشل الحذف', variant: 'destructive' });
+    }
   };
 
   // Aggregate stats
@@ -996,11 +1002,11 @@ export function AttendanceSection() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <div style={{ minWidth: '960px' }}>
+            <div style={{ minWidth: '1010px' }}>
               {/* Header */}
               <div
                 className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
-                style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px' }}
+                style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px 50px' }}
               >
                 <div className="text-center">#</div>
                 <div className="text-center">التاريخ</div>
@@ -1012,6 +1018,7 @@ export function AttendanceSection() {
                 <div className="text-center">حضور</div>
                 <div className="text-center">ذكر</div>
                 <div className="text-center">أنثى</div>
+                <div className="text-center">إجراءات</div>
               </div>
 
               {/* Body */}
@@ -1024,7 +1031,7 @@ export function AttendanceSection() {
                   key={a.id}
                   className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 cursor-pointer text-sm"
                   onClick={() => handleOpenEdit(a)}
-                  style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px' }}
+                  style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px 50px' }}
                 >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
                   <div className="text-center num text-sm whitespace-nowrap">{
@@ -1059,6 +1066,17 @@ export function AttendanceSection() {
                   <div className="text-center num font-bold">{a.totalCount}</div>
                   <div className="text-center num">{a.maleCount}</div>
                   <div className="text-center num">{a.femaleCount}</div>
+                  <div className="text-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="حذف سجل الحضور"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(a); }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
 
@@ -1066,7 +1084,7 @@ export function AttendanceSection() {
               {attendances.length > 0 && (
                 <div
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
-                  style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px' }}
+                  style={{ gridTemplateColumns: '40px 110px 1fr 100px 150px 130px 90px 70px 70px 70px 50px' }}
                 >
                   <div className="text-left" style={{ gridColumn: '1 / span 6' }}>
                     الإجمالي ({attendances.length} سجل):
