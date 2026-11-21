@@ -12,24 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Trash2, Download, Printer, Wallet, TrendingUp, TrendingDown,
-  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, Ban, RotateCcw,
+  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const currency = (n: number) => new Intl.NumberFormat('ar-DZ', { style: 'currency', currency: 'DZD', maximumFractionDigits: 0 }).format(n);
 
+// Stable date formatter — uses Latin digits, DD/MM/YYYY format
 const formatDate = (iso: string | Date) => {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-};
-
-const formatDateTime = (iso: string | Date | null | undefined) => {
-  if (!iso) return '-';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '-';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
 interface StudentPayment {
@@ -43,9 +36,6 @@ interface StudentPayment {
   notes: string | null;
   receivedBy?: string | null;
   receivedByName?: string | null;
-  createdAt?: string;
-  isCancelled?: boolean;
-  studentId?: string;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -58,10 +48,6 @@ interface TeacherPayment {
   paymentLabel: string | null;
   paymentDate: string;
   notes: string | null;
-  receivedBy?: string | null;
-  receivedByName?: string | null;
-  createdAt?: string;
-  isCancelled?: boolean;
   teacher: { id: string; name: string; department?: { name: string } };
 }
 
@@ -95,8 +81,10 @@ interface Report {
 }
 
 export function FinanceDashboard({ isDirector = false }: { isDirector?: boolean }) {
+  // Employees start on student-payments tab; directors on overview
   const [tab, setTab] = useState(isDirector ? 'overview' : 'student-payments');
 
+  // Define which tabs are visible based on role
   const visibleTabs = isDirector
     ? [
         { value: 'overview', label: 'نظرة عامة', icon: BarChart3 },
@@ -109,6 +97,7 @@ export function FinanceDashboard({ isDirector = false }: { isDirector?: boolean 
         { value: 'receipts', label: 'الوصولات', icon: Receipt },
       ]
     : [
+        // Employees only see student payments + student receipts
         { value: 'student-payments', label: 'أقساط الطلاب', icon: Users },
         { value: 'receipts', label: 'وصولات الطلاب', icon: Receipt },
       ];
@@ -153,6 +142,7 @@ function OverviewTab() {
 
   return (
     <div className="space-y-4">
+      {/* All-time totals */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <Card className="border-emerald-200 bg-emerald-50/50">
           <CardContent className="p-5">
@@ -215,6 +205,7 @@ function OverviewTab() {
         </Card>
       </div>
 
+      {/* Secondary expenses summary by type */}
       {report.expensesByType && Object.keys(report.expensesByType).length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-lg">توزيع المصاريف الثانوية حسب النوع</CardTitle></CardHeader>
@@ -228,7 +219,10 @@ function OverviewTab() {
                     <div key={type} className="flex items-center gap-3">
                       <div className="w-24 text-sm font-medium">{type}</div>
                       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-orange-500 rounded-full" style={{ width: `${(amount / maxAmt) * 100}%` }} />
+                        <div
+                          className="h-full bg-orange-500 rounded-full"
+                          style={{ width: `${(amount / maxAmt) * 100}%` }}
+                        />
                       </div>
                       <div className="w-32 text-left num text-sm font-medium text-orange-700">{currency(amount)}</div>
                     </div>
@@ -239,22 +233,32 @@ function OverviewTab() {
         </Card>
       )}
 
+      {/* Outstanding balances */}
       <Card>
         <CardHeader><CardTitle className="text-lg">الطلاب الذين عليهم مبالغ متبقية ({report.outstanding.length})</CardTitle></CardHeader>
         <CardContent className="p-0">
           <div className="max-h-80 overflow-y-auto">
             <div style={{ minWidth: '560px' }}>
-              <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: '1fr 120px 120px 120px 120px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                style={{ gridTemplateColumns: '1fr 120px 120px 120px 120px' }}
+              >
                 <div className="text-right">الطالب</div>
                 <div className="text-center">القسم</div>
                 <div className="text-center">المدفوع</div>
                 <div className="text-center">الرسوم</div>
                 <div className="text-center">المتبقي</div>
               </div>
+              {/* Body */}
               {report.outstanding.length === 0 ? (
                 <div className="text-center py-4 text-emerald-600">لا يوجد طلاب عليهم مبالغ</div>
               ) : report.outstanding.map(s => (
-                <div key={s.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '1fr 120px 120px 120px 120px' }}>
+                <div
+                  key={s.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '1fr 120px 120px 120px 120px' }}
+                >
                   <div className="text-right font-medium">{s.name}</div>
                   <div className="text-center text-sm">{s.department || '-'}</div>
                   <div className="text-center num text-emerald-600">{currency(s.paid)}</div>
@@ -267,19 +271,29 @@ function OverviewTab() {
         </CardContent>
       </Card>
 
+      {/* Teacher payment totals */}
       <Card>
         <CardHeader><CardTitle className="text-lg">رواتب الأساتذة - ملخص</CardTitle></CardHeader>
         <CardContent className="p-0">
           <div style={{ minWidth: '480px' }}>
-            <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm" style={{ gridTemplateColumns: '1fr 160px 160px' }}>
+            {/* Header */}
+            <div
+              className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
+              style={{ gridTemplateColumns: '1fr 160px 160px' }}
+            >
               <div className="text-right">الأستاذ</div>
               <div className="text-center">الراتب الشهري</div>
               <div className="text-center">المدفوع الكلي</div>
             </div>
+            {/* Body */}
             {report.teacherTotals.length === 0 ? (
               <div className="text-center py-4 text-muted-foreground">لا توجد بيانات</div>
             ) : report.teacherTotals.map(t => (
-              <div key={t.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '1fr 160px 160px' }}>
+              <div
+                key={t.id}
+                className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                style={{ gridTemplateColumns: '1fr 160px 160px' }}
+              >
                 <div className="text-right font-medium">{t.name}</div>
                 <div className="text-center num">{currency(t.salary)}</div>
                 <div className="text-center num text-emerald-600">{currency(t.paid)}</div>
@@ -299,6 +313,8 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStudent, setFilterStudent] = useState('all');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState<any>({
     studentId: '', amount: '', paymentType: 'installment', paymentLabel: 'قسط',
@@ -311,6 +327,8 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (filterStudent !== 'all') params.set('studentId', filterStudent);
+    if (filterStartDate) params.set('startDate', filterStartDate);
+    if (filterEndDate) params.set('endDate', filterEndDate);
     const res = await fetch(`/api/finance/student-payments?${params.toString()}`);
     const data = await res.json();
     setPayments(data.payments || []);
@@ -321,7 +339,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
   useEffect(() => {
     fetch('/api/students').then(r => r.json()).then(d => setStudents(d.students || []));
   }, []);
-  useEffect(() => { load(); }, [search, filterStudent]);
+  useEffect(() => { load(); }, [search, filterStudent, filterStartDate, filterEndDate]);
 
   const handleSave = async () => {
     if (!formData.studentId || !formData.amount) {
@@ -353,7 +371,10 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">إجمالي: <span className="num font-bold text-emerald-700">{currency(total)}</span></p>
+        </div>
         <div className="flex gap-2">
           {isDirector && (
             <Button variant="outline" size="sm" onClick={() => window.open('/api/export/student-payments', '_blank')}>
@@ -366,7 +387,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
 
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="بحث برقم الوصل أو اسم الطالب..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
@@ -378,6 +399,15 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
                 {students.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} dir="ltr" placeholder="من تاريخ" />
+            <div className="flex gap-2">
+              <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} dir="ltr" placeholder="إلى تاريخ" />
+              {(filterStartDate || filterEndDate) && (
+                <Button variant="ghost" size="sm" onClick={() => { setFilterStartDate(''); setFilterEndDate(''); }} title="مسح التاريخ">
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -386,7 +416,11 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <div style={{ minWidth: '880px' }}>
-              <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm" style={{ gridTemplateColumns: '40px 130px 110px 1fr 130px 110px 120px 110px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
+                style={{ gridTemplateColumns: '40px 130px 110px 1fr 130px 110px 120px 110px' }}
+              >
                 <div className="text-center">#</div>
                 <div className="text-right">رقم الوصل</div>
                 <div className="text-right">التاريخ</div>
@@ -396,12 +430,18 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
                 <div className="text-center">المبلغ</div>
                 <div className="text-center">إجراءات</div>
               </div>
+
+              {/* Body */}
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
               ) : payments.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">لا توجد دفعات</div>
               ) : payments.map((p, i) => (
-                <div key={p.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '40px 130px 110px 1fr 130px 110px 120px 110px' }}>
+                <div
+                  key={p.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '40px 130px 110px 1fr 130px 110px 120px 110px' }}
+                >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
                   <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
@@ -587,7 +627,11 @@ function TeacherPaymentsTab() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <div style={{ minWidth: '880px' }}>
-              <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm" style={{ gridTemplateColumns: '40px 130px 110px 1fr 110px 110px 120px 110px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
+                style={{ gridTemplateColumns: '40px 130px 110px 1fr 110px 110px 120px 110px' }}
+              >
                 <div className="text-center">#</div>
                 <div className="text-right">رقم الوصل</div>
                 <div className="text-right">التاريخ</div>
@@ -597,12 +641,18 @@ function TeacherPaymentsTab() {
                 <div className="text-center">المبلغ</div>
                 <div className="text-center">إجراءات</div>
               </div>
+
+              {/* Body */}
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
               ) : payments.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">لا توجد دفعات</div>
               ) : payments.map((p, i) => (
-                <div key={p.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '40px 130px 110px 1fr 110px 110px 120px 110px' }}>
+                <div
+                  key={p.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '40px 130px 110px 1fr 110px 110px 120px 110px' }}
+                >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
                   <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
@@ -768,6 +818,7 @@ function ReportsTab() {
         </CardContent>
       </Card>
 
+      {/* Grouped results */}
       {report?.grouped && report.grouped.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-lg">
@@ -777,15 +828,30 @@ function ReportsTab() {
           </CardTitle></CardHeader>
           <CardContent className="p-0">
             <div style={{ minWidth: '560px' }}>
-              <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm" style={{ gridTemplateColumns: groupBy === 'specialization' ? '1fr 1fr 100px 140px' : groupBy === 'student' ? '1fr 100px 100px 140px' : '1fr 100px 140px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
+                style={{ gridTemplateColumns:
+                  groupBy === 'specialization' ? '1fr 1fr 100px 140px'
+                  : groupBy === 'student' ? '1fr 100px 100px 140px'
+                  : '1fr 100px 140px' }}
+              >
                 <div className="text-right">{groupBy === 'department' ? 'القسم' : groupBy === 'specialization' ? 'التخصص' : 'الطالب'}</div>
                 {groupBy === 'specialization' && <div className="text-right">القسم</div>}
                 <div className="text-center">عدد الطلاب</div>
                 {groupBy === 'student' && <div className="text-center">عدد الدفعات</div>}
                 <div className="text-center">إجمالي المداخيل</div>
               </div>
+              {/* Body */}
               {report.grouped.map((g: any, i: number) => (
-                <div key={i} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: groupBy === 'specialization' ? '1fr 1fr 100px 140px' : groupBy === 'student' ? '1fr 100px 100px 140px' : '1fr 100px 140px' }}>
+                <div
+                  key={i}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns:
+                    groupBy === 'specialization' ? '1fr 1fr 100px 140px'
+                    : groupBy === 'student' ? '1fr 100px 100px 140px'
+                    : '1fr 100px 140px' }}
+                >
                   <div className="text-right font-medium">{g.name}</div>
                   {groupBy === 'specialization' && <div className="text-right text-sm">{g.department}</div>}
                   <div className="text-center num">{g.studentsCount}</div>
@@ -848,17 +914,26 @@ function ReportsTab() {
             <CardContent className="p-0">
               <div className="max-h-80 overflow-y-auto">
                 <div style={{ minWidth: '560px' }}>
-                  <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}>
+                  {/* Header */}
+                  <div
+                    className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                    style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}
+                  >
                     <div className="text-right">رقم الوصل</div>
                     <div className="text-right">التاريخ</div>
                     <div className="text-right">الطالب</div>
                     <div className="text-center">النوع</div>
                     <div className="text-center">المبلغ</div>
                   </div>
+                  {/* Body */}
                   {report.studentPayments.length === 0 ? (
                     <div className="text-center py-4 text-muted-foreground">لا توجد مداخيل</div>
                   ) : report.studentPayments.map(p => (
-                    <div key={p.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}>
+                    <div
+                      key={p.id}
+                      className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                      style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}
+                    >
                       <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                       <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
                       <div className="text-right font-medium">{p.student.name}</div>
@@ -876,17 +951,26 @@ function ReportsTab() {
             <CardContent className="p-0">
               <div className="max-h-80 overflow-y-auto">
                 <div style={{ minWidth: '560px' }}>
-                  <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}>
+                  {/* Header */}
+                  <div
+                    className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                    style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}
+                  >
                     <div className="text-right">رقم الوصل</div>
                     <div className="text-right">التاريخ</div>
                     <div className="text-right">الأستاذ</div>
                     <div className="text-center">الشهر</div>
                     <div className="text-center">المبلغ</div>
                   </div>
+                  {/* Body */}
                   {report.teacherPayments.length === 0 ? (
                     <div className="text-center py-4 text-muted-foreground">لا توجد مصاريف</div>
                   ) : report.teacherPayments.map(p => (
-                    <div key={p.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}>
+                    <div
+                      key={p.id}
+                      className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                      style={{ gridTemplateColumns: '130px 110px 1fr 110px 120px' }}
+                    >
                       <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                       <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
                       <div className="text-right font-medium">{p.teacher.name}</div>
@@ -904,16 +988,25 @@ function ReportsTab() {
             <CardContent className="p-0">
               <div className="max-h-80 overflow-y-auto">
                 <div style={{ minWidth: '560px' }}>
-                  <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: '110px 110px 1fr 120px' }}>
+                  {/* Header */}
+                  <div
+                    className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                    style={{ gridTemplateColumns: '110px 110px 1fr 120px' }}
+                  >
                     <div className="text-right">التاريخ</div>
                     <div className="text-center">النوع</div>
                     <div className="text-right">الوصف</div>
                     <div className="text-center">المبلغ</div>
                   </div>
+                  {/* Body */}
                   {!report.expenses || report.expenses.length === 0 ? (
                     <div className="text-center py-4 text-muted-foreground">لا توجد مصاريف ثانوية</div>
                   ) : report.expenses.map(e => (
-                    <div key={e.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '110px 110px 1fr 120px' }}>
+                    <div
+                      key={e.id}
+                      className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                      style={{ gridTemplateColumns: '110px 110px 1fr 120px' }}
+                    >
                       <div className="text-right num text-sm">{formatDate(e.date)}</div>
                       <div className="text-center"><Badge variant="outline">{e.type}</Badge></div>
                       <div className="text-right text-sm">{e.description || '-'}</div>
@@ -936,33 +1029,43 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStudent, setFilterStudent] = useState('all');
+  const [filterRegistrar, setFilterRegistrar] = useState('all');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [search, setSearch] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const fetches = [fetch('/api/finance/student-payments').then(r => r.json())];
-      if (isDirector) {
-        fetches.push(fetch('/api/finance/teacher-payments').then(r => r.json()));
-      }
-      fetch('/api/students').then(r => r.json()).then(d => setStudents(d.students || []));
-      Promise.all(fetches).then((results: any[]) => {
-        setAllPayments(results[0]?.payments || []);
-        if (isDirector && results[1]) {
-          setRecentTeacherPayments(results[1].payments?.slice(0, 20) || []);
-        }
-      }).finally(() => setLoading(false));
-    } catch {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
+    const fetches = [fetch('/api/finance/student-payments').then(r => r.json())];
+    if (isDirector) {
+      fetches.push(fetch('/api/finance/teacher-payments').then(r => r.json()));
+    }
+    fetch('/api/students').then(r => r.json()).then(d => setStudents(d.students || []));
+    Promise.all(fetches).then((results: any[]) => {
+      setAllPayments(results[0]?.payments || []);
+      if (isDirector && results[1]) {
+        setRecentTeacherPayments(results[1].payments?.slice(0, 20) || []);
+      }
+    }).finally(() => setLoading(false));
   }, [isDirector]);
 
+  // قائمة المسجّلين الفريدين من الوصولات (receivedByName)
+  const registrars = Array.from(
+    new Set(allPayments.map(p => p.receivedByName).filter(Boolean))
+  ) as string[];
+
+  // Filter payments
   const filteredPayments = allPayments.filter(p => {
     if (filterStudent !== 'all' && p.studentId !== filterStudent) return false;
+    if (filterRegistrar !== 'all' && p.receivedByName !== filterRegistrar) return false;
+    if (filterStartDate || filterEndDate) {
+      const d = new Date(p.paymentDate);
+      if (filterStartDate && d < new Date(filterStartDate)) return false;
+      if (filterEndDate) {
+        const end = new Date(filterEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (d > end) return false;
+      }
+    }
     if (search) {
       const q = search.toLowerCase();
       if (
@@ -974,47 +1077,7 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
     return true;
   });
 
-  // ===== شطب الوصل (للمدير فقط) =====
-  const handleCancelPayment = async (id: string, type: 'student' | 'teacher') => {
-    const reason = prompt('سبب شطب الوصل:');
-    if (!reason) return;
-    try {
-      const res = await fetch(`/api/finance/cancel/${type}/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-      if (res.ok) {
-        loadData();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert('فشل الشطب: ' + (data.error || ''));
-      }
-    } catch (e) {
-      alert('خطأ في الاتصال');
-    }
-  };
-
-  // ===== نزع الشطب (إرجاع الوصل المشطب) =====
-  const handleUncancelPayment = async (id: string, type: 'student' | 'teacher') => {
-    if (!confirm('إرجاع الشطب؟ سيتم تفعيل الوصل مرة أخرى.')) return;
-    try {
-      const res = await fetch(`/api/finance/cancel/${type}/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'uncancel' }),
-      });
-      if (res.ok) {
-        loadData();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert('فشل إرجاع الشطب: ' + (data.error || ''));
-      }
-    } catch (e) {
-      alert('خطأ في الاتصال');
-    }
-  };
-
+  // Group by student for batch printing
   const selectedStudent = filterStudent !== 'all'
     ? students.find(s => s.id === filterStudent)
     : null;
@@ -1024,101 +1087,143 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
 
   return (
     <div className="space-y-4">
+      {/* Student receipts with filter */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center justify-between flex-wrap gap-2">
             <span>وصولات الطلاب - للطباعة</span>
             {selectedStudent && selectedStudentPayments.length > 0 && (
-              <Button size="sm" onClick={() => window.open(`/receipts-batch?studentId=${selectedStudent.id}`, '_blank')} className="bg-primary">
+              <Button
+                size="sm"
+                onClick={() => window.open(`/receipts-batch?studentId=${selectedStudent.id}`, '_blank')}
+                className="bg-primary"
+              >
                 <Printer className="w-4 h-4 ml-1" /> طباعة كل وصولات {selectedStudent.name} ({selectedStudentPayments.length})
               </Button>
             )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="بحث برقم الوصل أو اسم الطالب..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10" />
+              <Input
+                placeholder="بحث برقم الوصل أو اسم الطالب..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pr-10"
+              />
             </div>
             <Select value={filterStudent} onValueChange={setFilterStudent}>
               <SelectTrigger><SelectValue placeholder="كل الطلاب" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل الطلاب</SelectItem>
                 {students.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name} {s.studentNumber ? `(${s.studentNumber})` : ''}</SelectItem>
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name} {s.studentNumber ? `(${s.studentNumber})` : ''}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filterRegistrar} onValueChange={setFilterRegistrar}>
+              <SelectTrigger><SelectValue placeholder="كل المسجّلين" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المسجّلين</SelectItem>
+                {registrars.map(name => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} dir="ltr" title="من تاريخ" />
+              <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} dir="ltr" title="إلى تاريخ" />
+              {(filterStartDate || filterEndDate || filterRegistrar !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setFilterRegistrar('all'); }}
+                  title="مسح الفلاتر"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
+          {/* Summary for filtered student */}
           {selectedStudent && selectedStudentPayments.length > 0 && (
             <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">{selectedStudent.name}</p>
-                <p className="text-xs text-muted-foreground">{selectedStudentPayments.length} وصل | إجمالي: {currency(selectedStudentPayments.reduce((s, p) => s + p.amount, 0))}</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedStudentPayments.length} وصل | إجمالي: {currency(selectedStudentPayments.reduce((s, p) => s + p.amount, 0))}
+                </p>
               </div>
-              <Button size="sm" variant="default" onClick={() => window.open(`/receipts-batch?studentId=${selectedStudent.id}`, '_blank')}>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => window.open(`/receipts-batch?studentId=${selectedStudent.id}`, '_blank')}
+              >
                 <Printer className="w-4 h-4 ml-1" /> طباعة الكل
               </Button>
             </div>
           )}
 
+          {/* Table */}
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            {(() => {
-              const gridCols = isDirector ? '130px 110px 1fr 110px 120px 140px 120px 130px' : '130px 110px 1fr 110px 120px 100px';
-              const minWidth = isDirector ? '990px' : '720px';
-              return (
-                <div style={{ minWidth }}>
-                  <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: gridCols }}>
-                    <div className="text-right">رقم الوصل</div>
-                    <div className="text-right">التاريخ</div>
-                    <div className="text-right">الطالب</div>
-                    <div className="text-center">النوع</div>
-                    <div className="text-center">المبلغ</div>
-                    {isDirector && <div className="text-center">وقت التسجيل</div>}
-                    {isDirector && <div className="text-center">المسجِّل</div>}
-                    <div className="text-center">إجراءات</div>
+            <div style={{ minWidth: '820px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                style={{ gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' }}
+              >
+                <div className="text-right">رقم الوصل</div>
+                <div className="text-right">التاريخ</div>
+                <div className="text-right">الطالب</div>
+                <div className="text-center">النوع</div>
+                <div className="text-right">المسجّل</div>
+                <div className="text-center">المبلغ</div>
+                <div className="text-center">طباعة</div>
+              </div>
+              {/* Body */}
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
+              ) : filteredPayments.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
+              ) : filteredPayments.map(p => (
+                <div
+                  key={p.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' }}
+                >
+                  <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
+                  <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
+                  <div className="text-right font-medium">{p.student?.name || '-'}</div>
+                  <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
+                  <div className="text-right text-xs text-muted-foreground">{p.receivedByName || '-'}</div>
+                  <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
+                  <div className="text-center">
+                    <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')}>
+                      <Printer className="w-4 h-4 ml-1" /> طباعة
+                    </Button>
                   </div>
-                  {loading ? (
-                    <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
-                  ) : filteredPayments.length === 0 ? (
-                    <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
-                  ) : filteredPayments.map(p => (
-                    <div key={p.id} className={`grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm ${p.isCancelled ? 'opacity-50 line-through' : ''}`} style={{ gridTemplateColumns: gridCols }}>
-                      <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
-                      <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
-                      <div className="text-right font-medium">{p.student?.name || '-'}</div>
-                      <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
-                      <div className="text-center num font-bold text-emerald-700">{currency(p.amount)}</div>
-                      {isDirector && (
-                        <div className="text-center num text-xs text-muted-foreground" dir="ltr">{formatDateTime(p.createdAt)}</div>
-                      )}
-                      {isDirector && (
-                        <div className="text-center text-xs font-medium">{p.receivedByName || '-'}</div>
-                      )}
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=student`, '_blank')} title="طباعة">
-                            <Printer className="w-4 h-4 ml-1" /> طباعة
-                          </Button>
-                          {isDirector && !p.isCancelled && (
-                            <Button size="sm" variant="ghost" onClick={() => handleCancelPayment(p.id, 'student')} title="شطب الوصل" className="h-8 px-2 hover:bg-red-50">
-                              <Ban className="w-4 h-4 text-red-600" />
-                            </Button>
-                          )}
-                          {isDirector && p.isCancelled && (
-                            <Button size="sm" variant="ghost" onClick={() => handleUncancelPayment(p.id, 'student')} title="نزع الشطب" className="h-8 px-2 hover:bg-green-50">
-                              <RotateCcw className="w-4 h-4 text-green-600" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              );
-            })()}
+              ))}
+              {/* Footer totals */}
+              {filteredPayments.length > 0 && (
+                <div
+                  className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
+                  style={{ gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' }}
+                >
+                  <div style={{ gridColumn: '1 / span 5' }} className="text-left">
+                    الإجمالي ({filteredPayments.length} وصل):
+                  </div>
+                  <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
+                  <div></div>
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1128,58 +1233,41 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
         <CardHeader><CardTitle className="text-lg">وصولات الأساتذة - للطباعة</CardTitle></CardHeader>
         <CardContent className="p-0">
           <div className="max-h-96 overflow-y-auto">
-            {(() => {
-              const gridCols = isDirector ? '130px 110px 1fr 120px 140px 120px 130px' : '130px 110px 1fr 120px 100px';
-              const minWidth = isDirector ? '930px' : '640px';
-              return (
-                <div style={{ minWidth }}>
-                  <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0" style={{ gridTemplateColumns: gridCols }}>
-                    <div className="text-right">رقم الوصل</div>
-                    <div className="text-right">التاريخ</div>
-                    <div className="text-right">الأستاذ</div>
-                    <div className="text-center">المبلغ</div>
-                    {isDirector && <div className="text-center">وقت التسجيل</div>}
-                    {isDirector && <div className="text-center">المسجِّل</div>}
-                    <div className="text-center">إجراءات</div>
+            <div style={{ minWidth: '640px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
+                style={{ gridTemplateColumns: '130px 110px 1fr 120px 100px' }}
+              >
+                <div className="text-right">رقم الوصل</div>
+                <div className="text-right">التاريخ</div>
+                <div className="text-right">الأستاذ</div>
+                <div className="text-center">المبلغ</div>
+                <div className="text-center">طباعة</div>
+              </div>
+              {/* Body */}
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
+              ) : recentTeacherPayments.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
+              ) : recentTeacherPayments.map(p => (
+                <div
+                  key={p.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '130px 110px 1fr 120px 100px' }}
+                >
+                  <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
+                  <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
+                  <div className="text-right font-medium">{p.teacher.name}</div>
+                  <div className="text-center num font-bold text-red-700">{currency(p.amount)}</div>
+                  <div className="text-center">
+                    <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=teacher`, '_blank')}>
+                      <Printer className="w-4 h-4 ml-1" /> طباعة
+                    </Button>
                   </div>
-                  {loading ? (
-                    <div className="text-center py-4 text-muted-foreground">جاري التحميل...</div>
-                  ) : recentTeacherPayments.length === 0 ? (
-                    <div className="text-center py-4 text-muted-foreground">لا توجد وصولات</div>
-                  ) : recentTeacherPayments.map(p => (
-                    <div key={p.id} className={`grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm ${p.isCancelled ? 'opacity-50 line-through' : ''}`} style={{ gridTemplateColumns: gridCols }}>
-                      <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
-                      <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
-                      <div className="text-right font-medium">{p.teacher.name}</div>
-                      <div className="text-center num font-bold text-red-700">{currency(p.amount)}</div>
-                      {isDirector && (
-                        <div className="text-center num text-xs text-muted-foreground" dir="ltr">{formatDateTime(p.createdAt)}</div>
-                      )}
-                      {isDirector && (
-                        <div className="text-center text-xs font-medium">{p.receivedByName || '-'}</div>
-                      )}
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="outline" onClick={() => window.open(`/api/receipt-print/${p.id}?type=teacher`, '_blank')} title="طباعة">
-                            <Printer className="w-4 h-4 ml-1" /> طباعة
-                          </Button>
-                          {isDirector && !p.isCancelled && (
-                            <Button size="sm" variant="ghost" onClick={() => handleCancelPayment(p.id, 'teacher')} title="شطب الوصل" className="h-8 px-2 hover:bg-red-50">
-                              <Ban className="w-4 h-4 text-red-600" />
-                            </Button>
-                          )}
-                          {isDirector && p.isCancelled && (
-                            <Button size="sm" variant="ghost" onClick={() => handleUncancelPayment(p.id, 'teacher')} title="نزع الشطب" className="h-8 px-2 hover:bg-green-50">
-                              <RotateCcw className="w-4 h-4 text-green-600" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              );
-            })()}
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1236,6 +1324,7 @@ function ExpensesTab() {
       setTotal(data.total || 0);
       setByType(data.byType || {});
     } else if (res.status === 403) {
+      // Finance access expired
       toast({ title: 'انتهت الجلسة', description: 'يرجى إعادة إدخال كلمة سر القسم المالي', variant: 'destructive' });
     }
     setLoading(false);
@@ -1328,6 +1417,7 @@ function ExpensesTab() {
         </CardContent>
       </Card>
 
+      {/* Summary by type */}
       {sortedByType.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base">توزيع المصاريف حسب النوع</CardTitle></CardHeader>
@@ -1337,7 +1427,10 @@ function ExpensesTab() {
                 <div key={type} className="flex items-center gap-3">
                   <div className="w-24 text-sm font-medium">{type}</div>
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: `${(amount / maxTypeAmount) * 100}%` }} />
+                    <div
+                      className="h-full bg-red-500 rounded-full"
+                      style={{ width: `${(amount / maxTypeAmount) * 100}%` }}
+                    />
                   </div>
                   <div className="w-32 text-left num text-sm font-medium text-red-700">{currency(amount)}</div>
                 </div>
@@ -1351,7 +1444,11 @@ function ExpensesTab() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <div style={{ minWidth: '720px' }}>
-              <div className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm" style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}>
+              {/* Header */}
+              <div
+                className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm"
+                style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}
+              >
                 <div className="text-center">#</div>
                 <div className="text-right">التاريخ</div>
                 <div className="text-center">النوع</div>
@@ -1359,12 +1456,17 @@ function ExpensesTab() {
                 <div className="text-center">المبلغ</div>
                 <div className="text-center">إجراءات</div>
               </div>
+              {/* Body */}
               {loading ? (
                 <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
               ) : expenses.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">لا توجد مصاريف</div>
               ) : expenses.map((e, i) => (
-                <div key={e.id} className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm" style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}>
+                <div
+                  key={e.id}
+                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}
+                >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
                   <div className="text-right num text-sm">{formatDate(e.date)}</div>
                   <div className="text-center"><Badge variant="outline">{e.type}</Badge></div>
@@ -1382,8 +1484,12 @@ function ExpensesTab() {
                   </div>
                 </div>
               ))}
+              {/* Footer totals */}
               {expenses.length > 0 && (
-                <div className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm" style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}>
+                <div
+                  className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
+                  style={{ gridTemplateColumns: '40px 110px 110px 1fr 120px 110px' }}
+                >
                   <div style={{ gridColumn: '1 / span 4' }} className="text-left">
                     الإجمالي ({expenses.length} مصروف):
                   </div>
@@ -1602,7 +1708,9 @@ function OtherIncomeTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>إلغاء</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'جاري الحفظ...' : editing ? 'حفظ' : 'إضافة'}</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'جاري الحفظ...' : editing ? 'حفظ' : 'إضافة'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
