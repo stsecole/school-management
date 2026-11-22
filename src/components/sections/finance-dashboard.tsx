@@ -14,7 +14,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Trash2, Download, Printer, Wallet, TrendingUp, TrendingDown,
-  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, X, ChevronsUpDown,
+  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, X, ChevronsUpDown, Ban, RotateCcw,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -33,6 +33,60 @@ const formatDateTime = (iso: string | Date) => {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+// ===== شطب/إرجاع شطب وصل (student | teacher | staff) =====
+async function toggleCancelReceipt(type: 'student' | 'teacher' | 'staff', id: string, action: 'cancel' | 'uncancel', reason?: string) {
+  const res = await fetch(`/api/finance/cancel/${type}/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, reason }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'فشل');
+  return data;
+}
+
+// ===== نافذة تأكيد شطب الوصل =====
+function CancelReceiptDialog({ open, onOpenChange, onConfirm, receiptLabel }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onConfirm: (reason: string) => void;
+  receiptLabel: string;
+}) {
+  const [reason, setReason] = useState('');
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-700">
+            <Ban className="w-5 h-5" /> تأكيد شطب الوصل
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-sm">سيتم شطب الوصل: <span className="font-mono font-bold">{receiptLabel}</span></p>
+          <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-900">
+            <p className="font-medium">تنبيه:</p>
+            <ul className="list-disc list-inside mt-1 space-y-0.5">
+              <li>المبلغ سيُستبعد من الإحصائيات</li>
+              <li>سيظهر خط أحمر على الوصل</li>
+              <li>يمكن إرجاع الشطب لاحقاً</li>
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <Label>سبب الشطب (اختياري)</Label>
+            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="مثال: خطأ في المبلغ، دفعة مكررة..." />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { onOpenChange(false); setReason(''); }}>إلغاء</Button>
+          <Button variant="destructive" onClick={() => { onConfirm(reason); setReason(''); }}>
+            <Ban className="w-4 h-4 ml-2" /> شطب الوصل
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface StudentPayment {
   id: string;
   receiptNumber: string;
@@ -45,6 +99,8 @@ interface StudentPayment {
   receivedBy?: string | null;
   receivedByName?: string | null;
   createdAt?: string;
+  isCancelled?: boolean;
+  cancelReason?: string | null;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -330,6 +386,7 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
     paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', notes: '',
   });
   const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<{ type: 'student'; id: string; label: string } | null>(null);
   const { toast } = useToast();
 
   const selectedPaymentStudent = useMemo(
@@ -458,11 +515,11 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
               ) : payments.map((p, i) => (
                 <div
                   key={p.id}
-                  className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
+                  className={`grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm ${p.isCancelled ? 'opacity-50 line-through' : ''}`}
                   style={{ gridTemplateColumns: '40px 130px 110px 1fr 130px 110px 120px 110px' }}
                 >
                   <div className="text-center num text-muted-foreground">{i + 1}</div>
-                  <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
+                  <div className="text-right font-mono text-xs num">{p.receiptNumber}{p.isCancelled && <span className="text-red-600 text-[10px] block">مشطوب</span>}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
                   <div className="text-right font-medium">{p.student.name}</div>
                   <div className="text-right text-sm">{p.student.department?.name || '-'}</div>
@@ -473,6 +530,16 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
                       <Button size="sm" variant="ghost" onClick={() => handlePrint(p.id)} title="طباعة الوصل">
                         <Printer className="w-4 h-4 text-blue-600" />
                       </Button>
+                      {isDirector && !p.isCancelled && (
+                        <Button size="sm" variant="ghost" onClick={() => setCancelTarget({ type: 'student', id: p.id, label: p.receiptNumber })} title="شطب">
+                          <Ban className="w-4 h-4 text-orange-600" />
+                        </Button>
+                      )}
+                      {isDirector && p.isCancelled && (
+                        <Button size="sm" variant="ghost" onClick={async () => { try { await toggleCancelReceipt('student', p.id, 'uncancel'); toast({ title: 'تم', description: 'تم إرجاع الشطب' }); load(); } catch (e: any) { toast({ title: 'خطأ', description: e.message || 'فشل إرجاع الشطب', variant: 'destructive' }); } }} title="إرجاع الشطب">
+                          <RotateCcw className="w-4 h-4 text-emerald-600" />
+                        </Button>
+                      )}
                       {isDirector && (
                         <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)} title="حذف">
                           <Trash2 className="w-4 h-4 text-red-600" />
@@ -579,6 +646,23 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CancelReceiptDialog
+        open={!!cancelTarget}
+        onOpenChange={(v) => !v && setCancelTarget(null)}
+        receiptLabel={cancelTarget?.label || ''}
+        onConfirm={async (reason) => {
+          if (!cancelTarget) return;
+          try {
+            await toggleCancelReceipt(cancelTarget.type, cancelTarget.id, 'cancel', reason);
+            toast({ title: 'تم', description: 'تم شطب الوصل' });
+            setCancelTarget(null);
+            load();
+          } catch (e: any) {
+            toast({ title: 'خطأ', description: e.message || 'فشل الشطب', variant: 'destructive' });
+          }
+        }}
+      />
     </div>
   );
 }

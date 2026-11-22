@@ -11,12 +11,21 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get('studentId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const search = searchParams.get('search')?.trim();
 
     const branchFilter = await getBranchFilter();
     const where: any = { ...branchFilter };
     if (studentId) where.studentId = studentId;
     if (startDate && endDate) {
       where.paymentDate = { gte: new Date(startDate), lte: new Date(endDate) };
+    }
+    // بحث برقم الوصل أو اسم الطالب أو رقم الطالب (SQLite: لا يدعم mode: 'insensitive')
+    if (search) {
+      where.OR = [
+        { receiptNumber: { contains: search } },
+        { student: { name: { contains: search } } },
+        { student: { studentNumber: { contains: search } } },
+      ];
     }
 
     const payments = await db.studentPayment.findMany({
@@ -25,7 +34,8 @@ export async function GET(request: NextRequest) {
       orderBy: { paymentDate: 'desc' },
     });
 
-    const total = payments.reduce((sum, p) => sum + p.amount, 0);
+    // الإجمالي يستبعد الوصولات المشطوبة
+    const total = payments.filter(p => !p.isCancelled).reduce((sum, p) => sum + p.amount, 0);
 
     return NextResponse.json({ payments, total });
   } catch (error: any) {
