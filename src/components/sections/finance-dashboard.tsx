@@ -25,6 +25,12 @@ const formatDate = (iso: string | Date) => {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
 };
 
+const formatDateTime = (iso: string | Date) => {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 interface StudentPayment {
   id: string;
   receiptNumber: string;
@@ -36,6 +42,7 @@ interface StudentPayment {
   notes: string | null;
   receivedBy?: string | null;
   receivedByName?: string | null;
+  createdAt?: string;
   student: { id: string; name: string; studentNumber: string | null; department?: { name: string } };
 }
 
@@ -1180,14 +1187,15 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
 
           {/* Table */}
           <div className="max-h-96 overflow-y-auto border rounded-lg">
-            <div style={{ minWidth: isDirector ? '820px' : '720px' }}>
+            <div style={{ minWidth: isDirector ? '980px' : '880px' }}>
               {/* Header */}
               <div
                 className="grid items-center gap-2 px-3 py-2 border-b bg-muted/50 font-medium text-sm sticky top-0"
-                style={isDirector ? { gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                style={isDirector ? { gridTemplateColumns: '130px 110px 150px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 150px 1fr 110px 120px 100px' }}
               >
                 <div className="text-right">رقم الوصل</div>
                 <div className="text-right">التاريخ</div>
+                <div className="text-right">التوقيت</div>
                 <div className="text-right">الطالب</div>
                 <div className="text-center">النوع</div>
                 {isDirector && <div className="text-right">المسجّل</div>}
@@ -1203,10 +1211,11 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
                 <div
                   key={p.id}
                   className="grid items-center gap-2 px-3 py-2 border-b hover:bg-muted/50 text-sm"
-                  style={isDirector ? { gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                  style={isDirector ? { gridTemplateColumns: '130px 110px 150px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 150px 1fr 110px 120px 100px' }}
                 >
                   <div className="text-right font-mono text-xs num">{p.receiptNumber}</div>
                   <div className="text-right num text-sm">{formatDate(p.paymentDate)}</div>
+                  <div className="text-right num text-xs text-muted-foreground">{p.createdAt ? formatDateTime(p.createdAt) : '-'}</div>
                   <div className="text-right font-medium">{p.student?.name || '-'}</div>
                   <div className="text-center"><Badge variant="outline">{p.paymentLabel}</Badge></div>
                   {isDirector && <div className="text-right text-xs text-muted-foreground">{p.receivedByName || '-'}</div>}
@@ -1222,9 +1231,9 @@ function ReceiptsTab({ isDirector = false }: { isDirector?: boolean }) {
               {filteredPayments.length > 0 && (
                 <div
                   className="grid items-center gap-2 px-3 py-3 border-t-2 bg-muted/30 font-medium text-sm"
-                  style={isDirector ? { gridTemplateColumns: '130px 110px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 1fr 110px 120px 100px' }}
+                  style={isDirector ? { gridTemplateColumns: '130px 110px 150px 1fr 110px 130px 100px 100px' } : { gridTemplateColumns: '130px 110px 150px 1fr 110px 120px 100px' }}
                 >
-                  <div style={isDirector ? { gridColumn: '1 / span 5' } : { gridColumn: '1 / span 4' }} className="text-left">
+                  <div style={isDirector ? { gridColumn: '1 / span 6' } : { gridColumn: '1 / span 5' }} className="text-left">
                     الإجمالي ({filteredPayments.length} وصل):
                   </div>
                   <div className="text-center num font-bold text-emerald-700">{currency(filteredPayments.reduce((s, p) => s + p.amount, 0))}</div>
