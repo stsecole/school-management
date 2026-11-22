@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,10 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Plus, Search, Trash2, Download, Printer, Wallet, TrendingUp, TrendingDown,
-  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, X,
+  Users, GraduationCap, BarChart3, FileText, Receipt, ReceiptIndianRupee, Edit, UserCog, X, ChevronsUpDown,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -327,7 +329,13 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
     studentId: '', amount: '', paymentType: 'installment', paymentLabel: 'قسط',
     paymentDate: new Date().toISOString().split('T')[0], paymentMethod: 'cash', notes: '',
   });
+  const [studentPickerOpen, setStudentPickerOpen] = useState(false);
   const { toast } = useToast();
+
+  const selectedPaymentStudent = useMemo(
+    () => students.find(s => s.id === formData.studentId),
+    [students, formData.studentId]
+  );
 
   const load = async () => {
     setLoading(true);
@@ -485,12 +493,45 @@ function StudentPaymentsTab({ isDirector = false }: { isDirector?: boolean }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             <div className="space-y-2 md:col-span-2">
               <Label>الطالب *</Label>
-              <Select value={formData.studentId} onValueChange={(v) => setFormData({ ...formData, studentId: v })}>
-                <SelectTrigger><SelectValue placeholder="اختر الطالب" /></SelectTrigger>
-                <SelectContent>
-                  {students.map(s => <SelectItem key={s.id} value={s.id}>{s.name} {s.studentNumber ? `(${s.studentNumber})` : ''}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={studentPickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedPaymentStudent
+                        ? `${selectedPaymentStudent.name}${selectedPaymentStudent.studentNumber ? ` (${selectedPaymentStudent.studentNumber})` : ''}`
+                        : 'اختر الطالب — اكتب الاسم للبحث'}
+                    </span>
+                    <ChevronsUpDown className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="ابحث بالاسم أو رقم الطالب..." />
+                    <CommandList className="max-h-64">
+                      <CommandEmpty>لا يوجد طالب بهذا الاسم</CommandEmpty>
+                      <CommandGroup>
+                        {students.map(s => (
+                          <CommandItem
+                            key={s.id}
+                            value={`${s.name} ${s.studentNumber || ''}`}
+                            onSelect={() => {
+                              setFormData({ ...formData, studentId: s.id });
+                              setStudentPickerOpen(false);
+                            }}
+                          >
+                            {s.name} {s.studentNumber ? `(${s.studentNumber})` : ''}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label>المبلغ (دج) *</Label>
