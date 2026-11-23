@@ -84,7 +84,7 @@ function toHours(mins: number): number {
   return Math.round((mins / 60) * 100) / 100;
 }
 
-export function AttendanceSection() {
+export function AttendanceSection({ isDirector = false }: { isDirector?: boolean }) {
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -1067,15 +1067,17 @@ export function AttendanceSection() {
                   <div className="text-center num">{a.maleCount}</div>
                   <div className="text-center num">{a.femaleCount}</div>
                   <div className="text-center">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      title="حذف سجل الحضور"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(a); }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {isDirector && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        title="حذف سجل الحضور"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(a); }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

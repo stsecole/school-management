@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, requireDirector } from '@/lib/auth';
 
 function parseTimeToMinutes(time: string): number | null {
   const m = time.match(/^(\d{1,2}):(\d{2})$/);
@@ -108,7 +108,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAuth();
+    // حذف الحضور متاح للمدير العام فقط — باقي المستخدمين يمكنهم التعديل فقط
+    const user = await requireDirector();
     const { id } = await params;
     await db.attendance.delete({ where: { id } });
     try { await db.activityLog.create({ data: { userId: user.id, userName: user.name, action: 'delete', module: 'attendance', description: 'حذف سجل حضور' } }); } catch (e) {}
@@ -116,6 +117,9 @@ export async function DELETE(
   } catch (error: any) {
     if (error.message === 'UNAUTHORIZED') {
       return NextResponse.json({ error: 'غير مصرح' }, { status: 401 });
+    }
+    if (error.message === 'FORBIDDEN') {
+      return NextResponse.json({ error: 'حذف الحضور متاح للمدير العام فقط' }, { status: 403 });
     }
     return NextResponse.json({ error: 'حدث خطأ' }, { status: 500 });
   }

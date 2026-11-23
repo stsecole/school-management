@@ -453,7 +453,7 @@ export default function Home() {
             <Suspense fallback={<SectionLoader />}><RegistrationsSection /></Suspense>
           )}
           {activeSection === 'attendance' && (
-            <Suspense fallback={<SectionLoader />}><AttendanceSection /></Suspense>
+            <Suspense fallback={<SectionLoader />}><AttendanceSection isDirector={user.role === 'director'} /></Suspense>
           )}
           {activeSection === 'tasks' && (
             <Suspense fallback={<SectionLoader />}><TasksSection /></Suspense>
