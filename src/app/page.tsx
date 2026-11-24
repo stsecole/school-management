@@ -10,7 +10,7 @@ import {
   CalendarCheck, ListTodo, Wallet, LogOut, Menu, GraduationCap as School,
   AlertCircle, UserCog, Calendar, Clock, ScanLine, BarChart3, Database, UserPlus,
   Sparkles, Settings, MessageCircle, FileSpreadsheet, Bell, IdCard, Shield, Archive, History, Zap, Building2,
-  Loader2, Search, X, Briefcase, Target,
+  Loader2, Search, X, Briefcase, Target, Award,
 } from 'lucide-react';
 import { LoginScreen } from '@/components/login-screen';
 import { DashboardStats } from '@/components/sections/dashboard-stats';
@@ -51,6 +51,7 @@ const OperationsCenter = lazy(() => import('@/components/sections/operations-cen
 const BranchesSection = lazy(() => import('@/components/sections/branches-section').then(m => ({ default: m.BranchesSection })));
 const JobApplicationsSection = lazy(() => import('@/components/sections/job-applications-section').then(m => ({ default: m.JobApplicationsSection })));
 const GoalsSection = lazy(() => import('@/components/sections/goals-section').then(m => ({ default: m.GoalsSection })));
+const CertificatesSection = lazy(() => import('@/components/sections/certificates-section').then(m => ({ default: m.CertificatesSection })));
 
 // ===== Loading fallback component =====
 function SectionLoader() {
@@ -72,7 +73,7 @@ interface SessionUser {
   canManageTimetable?: boolean;
 }
 
-type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'job-applications' | 'goals';
+type Section = 'dashboard' | 'interactive-dashboard' | 'operations' | 'students' | 'teachers' | 'departments' | 'registrations' | 'attendance' | 'tasks' | 'finance' | 'users' | 'timetable' | 'timesheet' | 'reports' | 'backup' | 'exams' | 'crm' | 'ai-assistant' | 'ai-settings' | 'whatsapp' | 'import' | 'notifications' | 'calendar' | 'student-cards' | 'permissions' | 'archive' | 'activity-log' | 'branches' | 'institution-settings' | 'job-applications' | 'goals' | 'certificates';
 
 const sections: { id: Section; label: string; icon: any; roles: ('director' | 'employee')[] }[] = [
   { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['director', 'employee'] },
@@ -95,6 +96,7 @@ const sections: { id: Section; label: string; icon: any; roles: ('director' | 'e
   { id: 'calendar', label: 'التقويم الزمني', icon: Calendar, roles: ['director', 'employee'] },
   { id: 'notifications', label: 'الإشعارات', icon: Bell, roles: ['director', 'employee'] },
   { id: 'student-cards', label: 'بطاقات الهوية', icon: IdCard, roles: ['director', 'employee'] },
+  { id: 'certificates', label: 'سجل الشهادات', icon: Award, roles: ['director', 'employee'] },
   { id: 'archive', label: 'الأرشيف', icon: Archive, roles: ['director', 'employee'] },
   { id: 'ai-assistant', label: 'المساعد الذكي', icon: Sparkles, roles: ['director', 'employee'] },
   { id: 'users', label: 'إدارة الحسابات', icon: UserCog, roles: ['director'] },
@@ -511,6 +513,9 @@ export default function Home() {
           )}
           {activeSection === 'student-cards' && (
             <Suspense fallback={<SectionLoader />}><StudentCardsSection /></Suspense>
+          )}
+          {activeSection === 'certificates' && (
+            <Suspense fallback={<SectionLoader />}><CertificatesSection /></Suspense>
           )}
           {activeSection === 'operations' && (
             <Suspense fallback={<SectionLoader />}><OperationsCenter isDirector={user.role === 'director'} onNavigate={(s) => setActiveSection(s as Section)} /></Suspense>
